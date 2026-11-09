@@ -1,51 +1,86 @@
-name: build
+name: Build MyClient
+
 on:
   push:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Java 21
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Gradle 9.2.0
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-9.2.0-bin.zip -O "$HOME/gradle.zip"
-          mkdir -p "$HOME/gradle"
-          unzip -q "$HOME/gradle.zip" -d "$HOME/gradle"
-          echo "$HOME/gradle/gradle-9.2.0/bin" >> "$GITHUB_PATH"
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.0'
 
       - name: Prepare project
         run: |
-          ls -la
-          if [ -f build.gradle ] && [ -d src ]; then
-            echo "Folosesc proiectul din repo"
-            echo "DIR=." >> "$GITHUB_ENV"
-          else
-            ZIP=$(find . -maxdepth 2 -name "*.zip" -not -path "./.git/*" | head -n 1)
-            if [ -z "$ZIP" ]; then echo "Nu gasesc nici proiect, nici zip in repo"; exit 1; fi
-            echo "Folosesc $ZIP"
-            rm -rf work
-            mkdir work
-            unzip -q -o "$ZIP" -d work
-            DIR=$(dirname "$(find work -name build.gradle | head -n 1)")
-            echo "DIR=$DIR" >> "$GITHUB_ENV"
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import shutil
+
+          root = Path(".")
+          java_root = root / "src/main/java"
+          resources = root / "src/main/resources"
+
+          java_root.mkdir(parents=True, exist_ok=True)
+          resources.mkdir(parents=True, exist_ok=True)
+
+          # Organize Java files according to their package declarations.
+          for file in list(root.glob("*.java")):
+              content = file.read_text(encoding="utf-8")
+              match = re.search(r'^\s*package\s+([\w.]+)\s*;', content, re.M)
+
+              if match:
+                  package_path = Path(*match.group(1).split("."))
+                  destination = java_root / package_path / file.name
+              else:
+                  destination = java_root / file.name
+
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              shutil.move(str(file), str(destination))
+              print(f"Java: {file.name} -> {destination}")
+
+          # Move Fabric resources.
+          for name in ["fabric.mod.json", "myclient.mixins.json", "en_us.json"]:
+              source = root / name
+              if source.exists():
+                  shutil.move(str(source), str(resources / name))
+
+          # Move sword textures and their JSON definitions.
+          for pattern in ["sword_*.png", "sword_*.json"]:
+              for source in root.glob(pattern):
+                  shutil.move(str(source), str(resources / source.name))
+
+          print("Project structure prepared.")
+          PY
+
+          echo "Project files:"
+          find src -type f
 
       - name: Build
-        run: |
-          cd "$DIR"
-          gradle build --no-daemon
+        run: gradle build --no-daemon
 
-      - name: Upload jar
+      - name: Verify JAR
+        run: |
+          echo "Generated JAR files:"
+          find build/libs -maxdepth 1 -name "*.jar" -type f
+          test -n "$(find build/libs -maxdepth 1 -name '*.jar' -type f)"
+
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: myclient
-          path: ${{ env.DIR }}/build/libs/*.jar
+          name: MyClient-JAR
+          path: build/libs/*.jar
+          if-no-files-found: error
