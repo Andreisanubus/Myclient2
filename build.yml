@@ -9,37 +9,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: '21'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 9.2.0
+          gradle-version: '9.2.0'
 
-      - name: Organize project
+      - name: Check project files
         run: |
-          mkdir -p src/main/java src/main/resources
+          echo "Checking project..."
+          test -f build.gradle
+          test -f settings.gradle
+          test -f gradle.properties
+          find . -maxdepth 3 -type f
 
-          for file in *.java; do
+      - name: Organize Java sources
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import shutil
+
+          root = Path(".")
+          java_root = root / "src/main/java"
+          java_root.mkdir(parents=True, exist_ok=True)
+
+          for file in list(root.glob("*.java")):
+              content = file.read_text(encoding="utf-8")
+              match = re.search(r'^\s*package\s+([\w.]+)\s*;', content, re.M)
+
+              if match:
+                  destination = java_root / Path(*match.group(1).split(".")) / file.name
+              else:
+                  destination = java_root / file.name
+
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              shutil.move(str(file), str(destination))
+              print(f"Moved: {file.name} -> {destination}")
+          PY
+
+      - name: Organize resources
+        run: |
+          mkdir -p src/main/resources
+
+          for file in fabric.mod.json myclient.mixins.json en_us.json *.png; do
             if [ -f "$file" ]; then
-              mv "$file" src/main/java/
-            fi
-          done
-
-          for file in fabric.mod.json myclient.mixins.json en_us.json *.png *.json; do
-            if [ -f "$file" ] && [ "$file" != "build.gradle" ] && [ "$file" != "settings.gradle" ] && [ "$file" != "gradle.properties" ]; then
               mv "$file" src/main/resources/
             fi
           done
 
-      - name: Build JAR
+      - name: Build project
         run: gradle build --no-daemon
 
       - name: Upload JAR
