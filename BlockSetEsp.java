@@ -68,8 +68,8 @@ public class BlockSetEsp extends Module {
         header("Lines");
         tracers = bool("Tracers", true);
         tracerFrom = mode("Tracer From", "Crosshair", "Crosshair", "Bottom");
-        tracerA = num("Tracer Alpha %", 70, 10, 100, 5);
-        maxTracers = num("Max Tracers", 40, 5, 100, 5);
+        tracerA = num("Tracer Alpha %", 55, 10, 100, 5);
+        maxTracers = num("Max Tracers (nearest)", 12, 3, 60, 1);
         tracerFrom.visible = () -> tracers.value;
         tracerA.visible = () -> tracers.value;
         maxTracers.visible = () -> tracers.value;
@@ -169,7 +169,7 @@ public class BlockSetEsp extends Module {
             if (fill) Proj.fillBox3D(c, box, col, (int) (fillA.get() * 2.55 * k));
             if (edges && d < 45) Proj.boxEdges(c, box, Proj.alpha(col, (int) (outlineA.get() * 2.55 * k)));
             if (tracers.value && tr < maxTracers.asInt()) {
-                Proj.line3(c, origin, box.getCenter(), Proj.alpha(col, (int) (tracerA.get() * 2.55)));
+                Proj.line3(c, origin, box.getCenter(), Proj.alpha(col, (int) (tracerA.get() * 2.55 * k)));
                 tr++;
             }
             if (labels.value && d <= 40) {
