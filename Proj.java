@@ -172,15 +172,43 @@ public final class Proj {
         for (int[] p : e) line3(c, corner(b, p[0]), corner(b, p[1]), argb);
     }
 
+    /** Linie subtire de 1 px, desenata pe segmente continue (arata curat si costa putin). */
     public static void line2(DrawContext c, double x0, double y0, double x1, double y1, int col) {
         double dx = x1 - x0, dy = y1 - y0;
-        int n = (int) Math.min(900, Math.max(Math.abs(dx), Math.abs(dy)) / 2);
-        if (n == 0) { c.fill((int) x0, (int) y0, (int) x0 + 2, (int) y0 + 2, col); return; }
-        for (int i = 0; i <= n; i++) {
-            int x = (int) (x0 + dx * i / n), y = (int) (y0 + dy * i / n);
-            if (x < -20 || y < -20 || x > sw + 20 || y > sh + 20) continue;
-            c.fill(x, y, x + 2, y + 2, col);
+        if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+            if (x1 < x0) { double t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; dx = -dx; dy = -dy; }
+            double slope = dy / dx;
+            int xs = (int) Math.max(Math.floor(x0), -1), xe = (int) Math.min(Math.floor(x1), sw);
+            int runStart = xs, runY = (int) Math.round(y0 + (xs + 0.5 - x0) * slope);
+            for (int x = xs; x <= xe; x++) {
+                int y = (int) Math.round(y0 + (x + 0.5 - x0) * slope);
+                if (y != runY) { hrun(c, runStart, x - 1, runY, col); runStart = x; runY = y; }
+            }
+            hrun(c, runStart, xe, runY, col);
+        } else {
+            if (y1 < y0) { double t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; dx = -dx; dy = -dy; }
+            double slope = dx / dy;
+            int ys = (int) Math.max(Math.floor(y0), -1), ye = (int) Math.min(Math.floor(y1), sh);
+            int runStart = ys, runX = (int) Math.round(x0 + (ys + 0.5 - y0) * slope);
+            for (int y = ys; y <= ye; y++) {
+                int x = (int) Math.round(x0 + (y + 0.5 - y0) * slope);
+                if (x != runX) { vrun(c, runStart, y - 1, runX, col); runStart = y; runX = x; }
+            }
+            vrun(c, runStart, ye, runX, col);
         }
+    }
+
+    private static void hrun(DrawContext c, int xa, int xb, int y, int col) {
+        if (y < 0 || y >= sh) return;
+        xa = Math.max(0, xa); xb = Math.min(sw - 1, xb);
+        if (xb >= xa) c.fill(xa, y, xb + 1, y + 1, col);
+    }
+
+    private static void vrun(DrawContext c, int ya, int yb, int x, int col) {
+        if (x < 0 || x >= sw) return;
+        ya = Math.max(0, ya); yb = Math.min(sh - 1, yb);
+        if (yb >= ya) c.fill(x, ya, x + 1, yb + 1, col);
     }
 
     public static void line3(DrawContext c, Vec3d a, Vec3d b, int col) {
