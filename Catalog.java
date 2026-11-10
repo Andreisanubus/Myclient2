@@ -92,12 +92,11 @@ public final class Catalog {
         m.add(new VisualMods.TargetEsp());
         m.add(new CosmeticMods.TotemSpirit());
         m.add(new CosmeticMods.Particles());
-        m.add(new CosmeticMods.SwordSkins());
         st(m, Category.VISUALS, "Hand Pose", "n:X:0:-2:2:0.05", "n:Y:0:-2:2:0.05", "n:Z:0:-2:2:0.05", "n:Rotation:0:-180:180:5", "n:Scale:1:0.2:2:0.05");
         st(m, Category.VISUALS, "Swing Animation", "m:Style:Slash:Slash|Chop|Hook|Spin|Double Tap|Push", "n:Speed:1:0.2:3:0.1");
         st(m, Category.VISUALS, "Hand Aura", "b:Glow Outline:true");
-        st(m, Category.VISUALS, "Weapon Inspect", "m:Knife Skin:None:None|Butterfly|Karambit|Katana", "m:Inspect:Classic:Classic|Twirl");
-        st(m, Category.VISUALS, "Atmosphere", "m:Sky:Space:Space|Northern Lights|Ringed Planet|Black Hole", "b:Keep In Rain:true");
+        m.add(new CosmeticMods.WeaponInspect());
+        m.add(new Atmosphere());
 
         // ---------------- HUD ----------------
         m.add(new HudMods.TargetHud());
