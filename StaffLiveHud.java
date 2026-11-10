@@ -72,16 +72,39 @@ public class StaffLiveHud extends HudModule {
         }
     }
 
+    private static String clean(String l) {
+        StringBuilder sb = new StringBuilder();
+        for (char ch : l.toCharArray()) if (ch >= 32 && ch != 127 && ch < 0x2500) sb.append(ch);
+        String t = sb.toString().trim();
+        return t.length() > 80 ? t.substring(0, 77) + "..." : t;
+    }
+
     private List<String> parse(String body) {
         String b = (body.length() > 20000 ? body.substring(0, 20000) : body).trim();
         List<String> out = new ArrayList<>();
+        String low = b.toLowerCase();
+        if (low.startsWith("<!doctype") || low.startsWith("<html") || low.contains("<head") || low.contains("<body")) {
+            var m = java.util.regex.Pattern.compile("<title[^>]*>(.*?)</title>", java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE).matcher(b);
+            out.add("Pagina web, nu date");
+            if (m.find()) out.add(clean(m.group(1)));
+            out.add("Foloseste un URL care da text/JSON");
+            return out;
+        }
         if (!format.is("Text") && (b.startsWith("[") || b.startsWith("{"))) {
             try {
                 collect(JsonParser.parseString(b), out, 0);
-                if (!out.isEmpty()) return out;
+                List<String> cl = new ArrayList<>();
+                for (String x : out) { String c2 = clean(x); if (!c2.isEmpty()) cl.add(c2); }
+                if (!cl.isEmpty()) return cl;
+                out.clear();
             } catch (Exception ignored) {}
         }
-        for (String ln : b.split("\\R")) if (!ln.isBlank()) out.add(ln.trim());
+        for (String ln : b.split("\\R")) {
+            String c2 = clean(ln);
+            if (c2.isEmpty()) continue;
+            if (c2.length() > 40 && c2.indexOf(' ') < 0) c2 = c2.substring(0, 37) + "...";   // sir lung fara spatii = cod/token
+            out.add(c2);
+        }
         return out;
     }
 
