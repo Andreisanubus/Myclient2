@@ -188,16 +188,29 @@ public final class CosmeticMods {
         }
     }
 
-    /** Skinuri pentru sabii: schimba modelul sabiei doar pe clientul tau (nu le vede nimeni altcineva). */
-    public static class SwordSkins extends Module {
-        public static final String[] SKINS = {"Ruby", "Emerald", "Sapphire", "Amethyst", "Gold", "Obsidian", "Frost", "Inferno", "Neon", "Void"};
-        private final ModeSetting skin, scope;
+    /**
+     * Weapon Inspect: schimba (doar pe clientul tau) sabia cu un Karambit si ruleaza o animatie de inspect.
+     * Animatia e o secventa de 28 de modele, fiecare cu alta pozitie/rotatie in mana, schimbate la fiecare tick.
+     */
+    public static class WeaponInspect extends Module {
+        public static final String[] FINISHES = {"Fade", "Slaughter", "Doppler", "Steel", "Gold"};
+        private static final int FRAMES = 28;
+        private final ModeSetting finish, key, scope;
+        private final NumberSetting speed;
+        private final Setting<Boolean> hold;
+        private int frame = -1;
+        private double acc;
+        private boolean wasDown;
 
-        public SwordSkins() {
-            super("Sword Skins", Category.VISUALS);
-            header("Skin");
-            skin = mode("Skin", "Ruby", SKINS);
+        public WeaponInspect() {
+            super("Weapon Inspect", Category.VISUALS);
+            header("Knife");
+            finish = mode("Finish", "Fade", FINISHES);
             scope = mode("Apply To", "All Swords", "All Swords", "Held Sword");
+            header("Inspect");
+            key = mode("Inspect Key", "V", dev.myclient.util.Keys.CHOICES);
+            speed = num("Animation Speed", 1.0, 0.4, 2.0, 0.1);
+            hold = bool("Hold Key To Keep Spinning", true);
         }
 
         private static boolean isSword(ItemStack st) {
@@ -208,25 +221,37 @@ public final class CosmeticMods {
             if (!id.equals(st.get(DataComponentTypes.ITEM_MODEL))) st.set(DataComponentTypes.ITEM_MODEL, id);
         }
 
-        private void restore(ItemStack st) { set(st, Registries.ITEM.getId(st.getItem())); }
+        private Identifier id(int f) {
+            return Identifier.of("myclient", "knife_" + finish.value.toLowerCase(Locale.ROOT) + "_f" + String.format("%02d", Math.max(0, f)));
+        }
 
         @Override public void onTick() {
             var p = mc.player;
             if (p == null) return;
-            Identifier id = Identifier.of("myclient", "sword_" + skin.value.toLowerCase(Locale.ROOT));
             ItemStack held = p.getMainHandStack();
+            boolean down = mc.currentScreen == null && dev.myclient.util.Keys.down(key.value);
+            if (down && !wasDown && isSword(held) && frame < 0) { frame = 0; acc = 0; }
+            wasDown = down;
+            if (frame >= 0) {
+                acc += speed.get();
+                while (acc >= 1) { acc -= 1; frame++; }
+                if (frame >= FRAMES) frame = (hold.value && down) ? 0 : -1;
+            }
             for (int i = 0; i < p.getInventory().size(); i++) {
                 ItemStack st = p.getInventory().getStack(i);
                 if (!isSword(st)) continue;
-                if (scope.is("All Swords") || st == held) set(st, id); else restore(st);
+                boolean isHeld = st == held;
+                if (scope.is("All Swords") || isHeld) set(st, id(isHeld ? frame : 0));
+                else set(st, Registries.ITEM.getId(st.getItem()));
             }
         }
 
         @Override protected void onDisable() {
+            frame = -1;
             if (mc.player == null) return;
             for (int i = 0; i < mc.player.getInventory().size(); i++) {
                 ItemStack st = mc.player.getInventory().getStack(i);
-                if (isSword(st)) restore(st);
+                if (isSword(st)) set(st, Registries.ITEM.getId(st.getItem()));
             }
         }
     }
