@@ -6,7 +6,9 @@
 package dev.myclient.chunkfinder;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -67,9 +69,11 @@ public final class ChunkFinderScanner {
 
         ActivityClues.Summary clues = new ActivityClues.Summary();
 
-        Map<BlockPos, SuspectObjects.Found> allCells = new HashMap<>();
-        Map<BlockPos, SuspectObjects.Found> geodeCells = new HashMap<>();
-        Map<BlockPos, SuspectObjects.Found> plantCells = new HashMap<>();
+        Map<SuspectObjects.Category, Integer> categoryCounts =
+                new EnumMap<>(SuspectObjects.Category.class);
+
+        Map<BlockPos, SuspectObjects.Found> geodeCells =
+                new HashMap<>();
 
         ChunkSection[] sections = chunk.getSectionArray();
         int bottomSection = world.getBottomSectionCoord();
@@ -114,33 +118,31 @@ public final class ChunkFinderScanner {
                             continue;
                         }
 
-                        int worldX = chunkPos.getStartX() + localX;
-                        int worldY = (sectionY << 4) + localY;
-                        int worldZ = chunkPos.getStartZ() + localZ;
-
-                        BlockPos pos = new BlockPos(
-                                worldX,
-                                worldY,
-                                worldZ
+                        categoryCounts.merge(
+                                category,
+                                1,
+                                Integer::sum
                         );
 
-                        SuspectObjects.Found found =
-                                new SuspectObjects.Found(
-                                        pos,
-                                        state,
-                                        category
-                                );
-
-                        allCells.put(pos, found);
-
                         if (category == SuspectObjects.Category.AMETHYST) {
-                            geodeCells.put(pos, found);
-                        }
+                            int worldX = chunkPos.getStartX() + localX;
+                            int worldY = (sectionY << 4) + localY;
+                            int worldZ = chunkPos.getStartZ() + localZ;
 
-                        if (clueKind != null
-                                && clueKind != ActivityClues.Kind.AMETHYST
-                                && clueKind != ActivityClues.Kind.BEES) {
-                            plantCells.put(pos, found);
+                            BlockPos pos = new BlockPos(
+                                    worldX,
+                                    worldY,
+                                    worldZ
+                            );
+
+                            geodeCells.put(
+                                    pos,
+                                    new SuspectObjects.Found(
+                                            pos,
+                                            state,
+                                            category
+                                    )
+                            );
                         }
                     }
                 }
@@ -149,43 +151,49 @@ public final class ChunkFinderScanner {
 
         List<SuspectObjects.Marker> markers = new ArrayList<>();
 
-        // Amethyst formations are grouped into separate markers.
+        // Amethyst must have a sufficiently mature connected formation.
         if (!geodeCells.isEmpty()) {
-            markers.addAll(
+            List<SuspectObjects.Marker> geodes =
                     SuspectObjects.geodes(
                             geodeCells,
-                            1,
-                            0,
-                            true
-                    )
-            );
+                            4,
+                            60,
+                            false
+                    );
+
+            if (!geodes.isEmpty()) {
+                markers.add(createChunkMarker(
+                        chunkPos,
+                        SuspectObjects.Category.AMETHYST,
+                        geodeCells.size(),
+                        "Mature amethyst formation"
+                ));
+            }
         }
 
-        // Vertical plant growth is grouped by detection type.
-        if (!plantCells.isEmpty()) {
-            markers.addAll(
-                    SuspectObjects.plants(
-                            plantCells,
-                            kind -> 1,
-                            true
-                    )
-            );
-        }
+        // Other categories require multiple blocks or growth clues.
+        for (SuspectObjects.Category category
+                : SuspectObjects.Category.values()) {
 
-        // Remaining detections receive individual markers.
-        for (SuspectObjects.Found found : allCells.values()) {
-            SuspectObjects.Category category = found.category();
-
-            if (category == SuspectObjects.Category.AMETHYST
-                    || category == SuspectObjects.Category.KELP
-                    || category == SuspectObjects.Category.CAVE_VINES
-                    || category == SuspectObjects.Category.VINES
-                    || category == SuspectObjects.Category.BAMBOO
-                    || category == SuspectObjects.Category.COCOA) {
+            if (category == SuspectObjects.Category.GEODES
+                    || category == SuspectObjects.Category.GROWTH
+                    || category == SuspectObjects.Category.AMETHYST) {
                 continue;
             }
 
-            markers.add(SuspectObjects.block(found, world));
+            int count = categoryCounts.getOrDefault(category, 0);
+            int required = minimumCount(category);
+
+            if (count < required) {
+                continue;
+            }
+
+            markers.add(createChunkMarker(
+                    chunkPos,
+                    category,
+                    count,
+                    count + " matching blocks"
+            ));
         }
 
         List<Long> glowPositions = new ArrayList<>();
@@ -210,6 +218,59 @@ public final class ChunkFinderScanner {
         return report;
     }
 
+    private static int minimumCount(SuspectObjects.Category category) {
+        return switch (category) {
+            case CONTAINERS -> 3;
+            case ENDER_STORAGE -> 2;
+            case HOPPERS -> 4;
+            case MACHINES -> 3;
+            case REDSTONE -> 8;
+            case SPAWNERS -> 2;
+            case BEE_NESTS -> 2;
+
+            case KELP -> 8;
+            case CAVE_VINES -> 6;
+            case VINES -> 12;
+            case BAMBOO -> 8;
+            case COCOA -> 6;
+
+            // These categories do not currently have block-based detection.
+            case DISPLAYS, ANOMALIES -> Integer.MAX_VALUE;
+
+            case AMETHYST, GEODES, GROWTH -> Integer.MAX_VALUE;
+        };
+    }
+
+    private static SuspectObjects.Marker createChunkMarker(
+            ChunkPos chunk,
+            SuspectObjects.Category category,
+            int count,
+            String detail
+    ) {
+        double startX = chunk.getStartX();
+        double startZ = chunk.getStartZ();
+
+        // The module replaces the Y coordinate with the global Y setting.
+        // This placeholder represents the complete chunk-width marker.
+        var bounds = new net.minecraft.util.math.Box(
+                startX,
+                0,
+                startZ,
+                startX + 16,
+                1,
+                startZ + 1
+        );
+
+        return new SuspectObjects.Marker(
+                bounds,
+                List.of(bounds),
+                category,
+                Map.of(),
+                category.label + " (" + count + ")",
+                detail
+        );
+    }
+
     public Report get(int x, int z) {
         return reports.get(key(x, z));
     }
@@ -220,6 +281,20 @@ public final class ChunkFinderScanner {
 
     public void forget(int x, int z) {
         reports.remove(key(x, z));
+    }
+
+    public void forgetOutside(int centerX, int centerZ, int radius) {
+        Iterator<Map.Entry<Long, Report>> iterator =
+                reports.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            Report report = iterator.next().getValue();
+
+            if (Math.abs(report.chunkX - centerX) > radius
+                    || Math.abs(report.chunkZ - centerZ) > radius) {
+                iterator.remove();
+            }
+        }
     }
 
     public void clear() {
