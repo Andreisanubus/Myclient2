@@ -12,7 +12,10 @@ import java.util.Map;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.block.BlockState;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
 
@@ -20,7 +23,6 @@ import net.minecraft.world.chunk.WorldChunk;
 public final class ChunkFinderScanner {
 
     private final GeodeGlowScan geodeScan = new GeodeGlowScan();
-
     private final Map<Long, Report> reports = new HashMap<>();
 
     public static final class Report {
@@ -29,23 +31,30 @@ public final class ChunkFinderScanner {
         public final ActivityClues.Summary clues;
         public final int geodeGlowCount;
         public final List<Long> geodeGlowPositions;
+        public final List<SuspectObjects.Marker> markers;
 
         private Report(
                 int chunkX,
                 int chunkZ,
                 ActivityClues.Summary clues,
                 int geodeGlowCount,
-                List<Long> geodeGlowPositions
+                List<Long> geodeGlowPositions,
+                List<SuspectObjects.Marker> markers
         ) {
             this.chunkX = chunkX;
             this.chunkZ = chunkZ;
             this.clues = clues;
             this.geodeGlowCount = geodeGlowCount;
             this.geodeGlowPositions = List.copyOf(geodeGlowPositions);
+            this.markers = List.copyOf(markers);
         }
 
         public int activityScore() {
             return clues.score();
+        }
+
+        public List<SuspectObjects.Marker> getMarkers() {
+            return markers;
         }
     }
 
@@ -54,38 +63,129 @@ public final class ChunkFinderScanner {
             return null;
         }
 
-        int chunkX = chunk.getPos().x;
-        int chunkZ = chunk.getPos().z;
+        ChunkPos chunkPos = chunk.getPos();
 
         ActivityClues.Summary clues = new ActivityClues.Summary();
 
+        Map<BlockPos, SuspectObjects.Found> allCells = new HashMap<>();
+        Map<BlockPos, SuspectObjects.Found> geodeCells = new HashMap<>();
+        Map<BlockPos, SuspectObjects.Found> plantCells = new HashMap<>();
+
         ChunkSection[] sections = chunk.getSectionArray();
+        int bottomSection = world.getBottomSectionCoord();
 
-        int bottomSection = chunk.getBottomSectionCoord();
+        for (int sectionIndex = 0;
+             sectionIndex < sections.length;
+             sectionIndex++) {
 
-        for (int sectionY = -4; sectionY <= 1; sectionY++) {
-            int index = sectionY - bottomSection;
-
-            if (index < 0 || index >= sections.length) {
-                continue;
-            }
-
-            ChunkSection section = sections[index];
+            ChunkSection section = sections[sectionIndex];
 
             if (section == null || section.isEmpty()) {
                 continue;
             }
 
-            int fromY = Math.max(-58, sectionY << 4);
-            int toY = Math.min(30, (sectionY << 4) + 15);
+            int sectionY = bottomSection + sectionIndex;
 
-            for (int y = fromY; y <= toY; y++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int x = 0; x < 16; x++) {
-                        clues.add(section.getBlockState(x, y & 15, z));
+            for (int localX = 0; localX < 16; localX++) {
+                for (int localY = 0; localY < 16; localY++) {
+                    for (int localZ = 0; localZ < 16; localZ++) {
+
+                        BlockState state = section.getBlockState(
+                                localX,
+                                localY,
+                                localZ
+                        );
+
+                        if (state.isAir()) {
+                            continue;
+                        }
+
+                        ActivityClues.Kind clueKind =
+                                ActivityClues.kind(state);
+
+                        if (clueKind != null) {
+                            clues.add(state);
+                        }
+
+                        SuspectObjects.Category category =
+                                SuspectObjects.category(state);
+
+                        if (category == null) {
+                            continue;
+                        }
+
+                        int worldX = chunkPos.getStartX() + localX;
+                        int worldY = (sectionY << 4) + localY;
+                        int worldZ = chunkPos.getStartZ() + localZ;
+
+                        BlockPos pos = new BlockPos(
+                                worldX,
+                                worldY,
+                                worldZ
+                        );
+
+                        SuspectObjects.Found found =
+                                new SuspectObjects.Found(
+                                        pos,
+                                        state,
+                                        category
+                                );
+
+                        allCells.put(pos, found);
+
+                        if (category == SuspectObjects.Category.AMETHYST) {
+                            geodeCells.put(pos, found);
+                        }
+
+                        if (clueKind != null
+                                && clueKind != ActivityClues.Kind.AMETHYST
+                                && clueKind != ActivityClues.Kind.BEES) {
+                            plantCells.put(pos, found);
+                        }
                     }
                 }
             }
+        }
+
+        List<SuspectObjects.Marker> markers = new ArrayList<>();
+
+        // Amethyst formations are grouped into separate markers.
+        if (!geodeCells.isEmpty()) {
+            markers.addAll(
+                    SuspectObjects.geodes(
+                            geodeCells,
+                            1,
+                            0,
+                            true
+                    )
+            );
+        }
+
+        // Vertical plant growth is grouped by detection type.
+        if (!plantCells.isEmpty()) {
+            markers.addAll(
+                    SuspectObjects.plants(
+                            plantCells,
+                            kind -> 1,
+                            true
+                    )
+            );
+        }
+
+        // Remaining detections receive individual markers.
+        for (SuspectObjects.Found found : allCells.values()) {
+            SuspectObjects.Category category = found.category();
+
+            if (category == SuspectObjects.Category.AMETHYST
+                    || category == SuspectObjects.Category.KELP
+                    || category == SuspectObjects.Category.CAVE_VINES
+                    || category == SuspectObjects.Category.VINES
+                    || category == SuspectObjects.Category.BAMBOO
+                    || category == SuspectObjects.Category.COCOA) {
+                continue;
+            }
+
+            markers.add(SuspectObjects.block(found, world));
         }
 
         List<Long> glowPositions = new ArrayList<>();
@@ -97,28 +197,29 @@ public final class ChunkFinderScanner {
         );
 
         Report report = new Report(
-                chunkX,
-                chunkZ,
+                chunkPos.x,
+                chunkPos.z,
                 clues,
                 glowCount,
-                glowPositions
+                glowPositions,
+                markers
         );
 
-        reports.put(key(chunkX, chunkZ), report);
+        reports.put(key(chunkPos.x, chunkPos.z), report);
 
         return report;
     }
 
-    public Report get(int chunkX, int chunkZ) {
-        return reports.get(key(chunkX, chunkZ));
+    public Report get(int x, int z) {
+        return reports.get(key(x, z));
     }
 
     public Map<Long, Report> getReports() {
         return Map.copyOf(reports);
     }
 
-    public void forget(int chunkX, int chunkZ) {
-        reports.remove(key(chunkX, chunkZ));
+    public void forget(int x, int z) {
+        reports.remove(key(x, z));
     }
 
     public void clear() {
@@ -126,7 +227,7 @@ public final class ChunkFinderScanner {
         geodeScan.clear();
     }
 
-    private static long key(int chunkX, int chunkZ) {
-        return ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
+    private static long key(int x, int z) {
+        return ((long) x << 32) | (z & 0xFFFFFFFFL);
     }
 }
