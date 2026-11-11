@@ -1,6 +1,8 @@
 
 // SPDX-License-Identifier: GPL-3.0-only
-// Adapted from Spectre 26.2 by 4ldenz. See docs/spectre-base-finder-port.md.
+// Adapted from Spectre 26.2 by 4ldenz.
+// See docs/spectre-base-finder-port.md.
+
 package dev.myclient.chunkfinder;
 
 import java.util.*;
@@ -20,6 +22,7 @@ import net.minecraft.util.shape.VoxelShape;
 
 /**
  * Received-world evidence, distinct from the older chunk heat inference.
+ * Each detection type has its own category and default ESP color.
  */
 public final class SuspectObjects {
 
@@ -33,9 +36,20 @@ public final class SuspectObjects {
         REDSTONE("Redstone", 0xFFFF547D),
         SPAWNERS("Spawners", 0xFFFF63F1),
         DISPLAYS("Armor / displays", 0xFF70A6FF),
-        GEODES("Amethyst", 0xFFD19BFF),
-        GROWTH("Growth / bees", 0xFF91F56B),
-        ANOMALIES("Light anomalies", 0xFFF2F57D);
+
+        KELP("Kelp", 0xFF35E66B),
+        AMETHYST("Amethyst / Geodes", 0xFFB66BFF),
+        BEE_NESTS("Bee nests / Beehives", 0xFFFFD34E),
+        CAVE_VINES("Cave vines", 0xFF35C9D0),
+        VINES("Vines", 0xFF7ED957),
+        BAMBOO("Bamboo", 0xFF91F56B),
+        COCOA("Cocoa", 0xFFB9824B),
+
+        ANOMALIES("Light anomalies", 0xFFF2F57D),
+
+        // Legacy categories kept for compatibility with older scanner code.
+        GEODES("Geodes (legacy)", 0xFFD19BFF),
+        GROWTH("Growth (legacy)", 0xFF91F56B);
 
         public final String label;
         public final int color;
@@ -87,7 +101,9 @@ public final class SuspectObjects {
 
         if (block instanceof AbstractChestBlock<?>
                 || block instanceof BarrelBlock
-                || block instanceof ShulkerBoxBlock) return Category.CONTAINERS;
+                || block instanceof ShulkerBoxBlock) {
+            return Category.CONTAINERS;
+        }
 
         if (block instanceof HopperBlock) return Category.HOPPERS;
 
@@ -96,7 +112,9 @@ public final class SuspectObjects {
                 || block instanceof DispenserBlock
                 || block instanceof ObserverBlock
                 || block instanceof CrafterBlock
-                || block instanceof BrewingStandBlock) return Category.MACHINES;
+                || block instanceof BrewingStandBlock) {
+            return Category.MACHINES;
+        }
 
         if (block instanceof RedstoneWireBlock
                 || block instanceof AbstractRedstoneGateBlock
@@ -108,29 +126,61 @@ public final class SuspectObjects {
                 || block == Blocks.REDSTONE_BLOCK
                 || block == Blocks.REDSTONE_LAMP
                 || block == Blocks.DAYLIGHT_DETECTOR
-                || block == Blocks.TARGET) return Category.REDSTONE;
+                || block == Blocks.TARGET) {
+            return Category.REDSTONE;
+        }
 
         if (block instanceof SpawnerBlock
-                || block instanceof TrialSpawnerBlock) return Category.SPAWNERS;
+                || block instanceof TrialSpawnerBlock) {
+            return Category.SPAWNERS;
+        }
+
+        ActivityClues.Kind kind = ActivityClues.kind(state);
+        if (kind != null) return category(kind);
 
         if (block == Blocks.AMETHYST_BLOCK
-                || block == Blocks.BUDDING_AMETHYST
-                || ActivityClues.kind(state) == ActivityClues.Kind.AMETHYST) return Category.GEODES;
-
-        if (ActivityClues.kind(state) != null) return Category.GROWTH;
+                || block == Blocks.BUDDING_AMETHYST) {
+            return Category.AMETHYST;
+        }
 
         return null;
     }
 
+    public static Category category(ActivityClues.Kind kind) {
+        if (kind == null) return null;
+
+        return switch (kind) {
+            case KELP -> Category.KELP;
+            case CAVE_VINES -> Category.CAVE_VINES;
+            case VINES -> Category.VINES;
+            case AMETHYST -> Category.AMETHYST;
+            case BAMBOO -> Category.BAMBOO;
+            case COCOA -> Category.COCOA;
+            case BEES -> Category.BEE_NESTS;
+        };
+    }
+
     public static Icon icon(BlockState state) {
-        if (state.isOf(Blocks.REDSTONE_WIRE)) return Icon.item(Items.REDSTONE);
+        if (state.isOf(Blocks.REDSTONE_WIRE)) {
+            return Icon.item(Items.REDSTONE);
+        }
 
         if (state.isOf(Blocks.CAVE_VINES)
-                || state.isOf(Blocks.CAVE_VINES_PLANT)) return CAVE_VINES_ICON;
+                || state.isOf(Blocks.CAVE_VINES_PLANT)) {
+            return CAVE_VINES_ICON;
+        }
 
-        if (state.isOf(Blocks.KELP_PLANT)) return Icon.item(Items.KELP);
+        if (state.isOf(Blocks.KELP) || state.isOf(Blocks.KELP_PLANT)) {
+            return Icon.item(Items.KELP);
+        }
 
-        if (state.isOf(Blocks.COCOA)) return Icon.item(Items.COCOA_BEANS);
+        if (state.isOf(Blocks.COCOA)) {
+            return Icon.item(Items.COCOA_BEANS);
+        }
+
+        if (state.isOf(Blocks.BAMBOO) || state.isOf(Blocks.BAMBOO_SAPLING)) {
+            return Icon.item(Items.BAMBOO);
+        }
 
         Item item = state.getBlock().asItem();
         return Icon.item(item == Items.AIR ? Items.AMETHYST_SHARD : item);
@@ -146,12 +196,19 @@ public final class SuspectObjects {
                     .toList();
 
         Box bounds = boxes.getFirst();
-        for (Box box : boxes) bounds = bounds.union(box);
+        for (Box box : boxes) {
+            bounds = bounds.union(box);
+        }
 
         Icon icon = icon(found.state());
 
-        return new Marker(bounds, List.of(bounds), found.category(),
-                Map.of(icon, 1), icon.label());
+        return new Marker(
+                bounds,
+                List.of(bounds),
+                found.category(),
+                Map.of(icon, 1),
+                icon.label()
+        );
     }
 
     public static List<Marker> geodes(
@@ -171,7 +228,11 @@ public final class SuspectObjects {
             Box bounds = null;
             Map<Icon, Integer> counts = new HashMap<>();
 
-            int mature = 0, small = 0, medium = 0, large = 0, budding = 0;
+            int mature = 0;
+            int small = 0;
+            int medium = 0;
+            int large = 0;
+            int budding = 0;
 
             while (!todo.isEmpty()) {
                 BlockPos pos = todo.removeFirst();
@@ -193,21 +254,30 @@ public final class SuspectObjects {
 
                 for (Direction direction : Direction.values()) {
                     BlockPos neighbor = pos.offset(direction);
-                    if (remaining.containsKey(neighbor)) todo.addLast(neighbor);
+                    if (remaining.containsKey(neighbor)) {
+                        todo.addLast(neighbor);
+                    }
                 }
             }
 
             int buds = small + medium + large;
-            int maturity = mature + buds == 0 ? 0 : 100 * mature / (mature + buds);
+            int maturity = mature + buds == 0
+                    ? 0
+                    : 100 * mature / (mature + buds);
 
             if (includeImmature || (budding > 0
                     && mature >= minimumClusters
                     && maturity >= minimumMaturity)) {
-                result.add(new Marker(bounds, List.of(bounds), Category.GEODES,
-                        Map.copyOf(counts), "Amethyst formation",
+                result.add(new Marker(
+                        bounds,
+                        List.of(bounds),
+                        Category.AMETHYST,
+                        Map.copyOf(counts),
+                        "Amethyst formation",
                         mature + " mature / " + buds + " buds - " + maturity
                                 + "% mature\n" + small + " small / "
-                                + medium + " medium / " + large + " large"));
+                                + medium + " medium / " + large + " large"
+                ));
             }
         }
 
@@ -225,10 +295,15 @@ public final class SuspectObjects {
             BlockPos start = entry.getKey();
             ActivityClues.Kind kind = ActivityClues.kind(entry.getValue().state());
 
-            if (kind == null) continue;
+            if (kind == null || kind == ActivityClues.Kind.AMETHYST
+                    || kind == ActivityClues.Kind.BEES) {
+                continue;
+            }
 
             Found below = cells.get(start.down());
-            if (below != null && ActivityClues.kind(below.state()) == kind) continue;
+            if (below != null && ActivityClues.kind(below.state()) == kind) {
+                continue;
+            }
 
             Map<Icon, Integer> counts = new HashMap<>();
             int length = 0;
@@ -236,7 +311,9 @@ public final class SuspectObjects {
 
             while (true) {
                 Found cell = cells.get(cursor);
-                if (cell == null || ActivityClues.kind(cell.state()) != kind) break;
+                if (cell == null || ActivityClues.kind(cell.state()) != kind) {
+                    break;
+                }
 
                 counts.merge(icon(cell.state()), 1, Integer::sum);
                 length++;
@@ -248,16 +325,25 @@ public final class SuspectObjects {
 
             Box bounds = new Box(start).union(new Box(cursor.down()));
 
-            result.add(new Marker(bounds, List.of(bounds), Category.GROWTH,
-                    Map.copyOf(counts), kind.label + " growth",
-                    length + " blocks long - threshold " + required));
+            result.add(new Marker(
+                    bounds,
+                    List.of(bounds),
+                    category(kind),
+                    Map.copyOf(counts),
+                    kind.label + " growth",
+                    length + " blocks long - threshold " + required
+            ));
         }
 
         return result;
     }
 
-    public static Focus focus(List<Marker> markers, Vec3d eye,
-                              Vec3d direction, double range) {
+    public static Focus focus(
+            List<Marker> markers,
+            Vec3d eye,
+            Vec3d direction,
+            double range
+    ) {
         Marker best = null;
         double bestDistance = Double.MAX_VALUE;
         boolean exactBest = false;
@@ -269,11 +355,17 @@ public final class SuspectObjects {
 
             if (distanceSquared(bounds, eye) > range * range) continue;
 
-            boolean hit = contains(bounds, eye) || intersectsSegment(bounds, eye, end);
+            boolean hit = contains(bounds, eye)
+                    || intersectsSegment(bounds, eye, end);
+
             double distance = Math.sqrt(distanceSquared(bounds, eye));
 
             if (!hit) {
-                Box expanded = expand(bounds, Math.min(2.0, distance * 0.035) + 0.15);
+                Box expanded = expand(
+                        bounds,
+                        Math.min(2.0, distance * 0.035) + 0.15
+                );
+
                 if (!intersectsSegment(expanded, eye, end)) continue;
             }
 
@@ -297,14 +389,21 @@ public final class SuspectObjects {
             }
         }
 
-        return new Focus(best, List.copyOf(nearby),
-                Math.sqrt(distanceSquared(best.bounds(), eye)));
+        return new Focus(
+                best,
+                List.copyOf(nearby),
+                Math.sqrt(distanceSquared(best.bounds(), eye))
+        );
     }
 
     private static Box expand(Box box, double amount) {
         return new Box(
-                box.minX - amount, box.minY - amount, box.minZ - amount,
-                box.maxX + amount, box.maxY + amount, box.maxZ + amount
+                box.minX - amount,
+                box.minY - amount,
+                box.minZ - amount,
+                box.maxX + amount,
+                box.maxY + amount,
+                box.maxZ + amount
         );
     }
 
@@ -315,23 +414,41 @@ public final class SuspectObjects {
     }
 
     private static double distanceSquared(Box box, Vec3d point) {
-        double dx = Math.max(Math.max(box.minX - point.x, 0.0), point.x - box.maxX);
-        double dy = Math.max(Math.max(box.minY - point.y, 0.0), point.y - box.maxY);
-        double dz = Math.max(Math.max(box.minZ - point.z, 0.0), point.z - box.maxZ);
+        double dx = Math.max(
+                Math.max(box.minX - point.x, 0.0),
+                point.x - box.maxX
+        );
+        double dy = Math.max(
+                Math.max(box.minY - point.y, 0.0),
+                point.y - box.maxY
+        );
+        double dz = Math.max(
+                Math.max(box.minZ - point.z, 0.0),
+                point.z - box.maxZ
+        );
+
         return dx * dx + dy * dy + dz * dz;
     }
 
     private static boolean intersectsSegment(Box box, Vec3d start, Vec3d end) {
-        double tMin = 0.0, tMax = 1.0;
+        double tMin = 0.0;
+        double tMax = 1.0;
 
         double[] origins = {start.x, start.y, start.z};
-        double[] deltas = {end.x - start.x, end.y - start.y, end.z - start.z};
+        double[] deltas = {
+                end.x - start.x,
+                end.y - start.y,
+                end.z - start.z
+        };
         double[] minimums = {box.minX, box.minY, box.minZ};
         double[] maximums = {box.maxX, box.maxY, box.maxZ};
 
         for (int axis = 0; axis < 3; axis++) {
             if (Math.abs(deltas[axis]) < 1.0E-9) {
-                if (origins[axis] < minimums[axis] || origins[axis] > maximums[axis]) return false;
+                if (origins[axis] < minimums[axis]
+                        || origins[axis] > maximums[axis]) {
+                    return false;
+                }
                 continue;
             }
 
