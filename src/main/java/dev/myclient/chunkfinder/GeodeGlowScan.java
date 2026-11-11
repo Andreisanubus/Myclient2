@@ -19,7 +19,6 @@ import net.minecraft.world.chunk.ChunkNibbleArray;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.chunk.light.ChunkLightingView;
-import net.minecraft.world.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 
