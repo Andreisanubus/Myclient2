@@ -1,3 +1,4 @@
+
 package dev.myclient.module;
 
 import dev.myclient.module.modules.*;
@@ -7,13 +8,15 @@ import java.util.List;
 public final class Catalog {
     private Catalog() {}
 
-    private static void st(List<Module> m, Category c, String name, String... spec) { m.add(new Stub(name, c, spec)); }
+    private static void st(List<Module> m, Category c, String name, String... spec) {
+        m.add(new Stub(name, c, spec));
+    }
 
     public static void registerAll(List<Module> m) {
         // ---------------- BASE RAID ----------------
         m.add(SusFinder.betterSusChunk());
         m.add(SusFinder.susChunkFinder());
-        st(m, Category.BASE_RAID, "Chunk Finder", "n:Changes To Activate:5:1:20:1", "b:Sky Light:true", "b:Only Below Y 0:true");
+        m.add(new ChunkFinderModule());
         m.add(SusFinder.amethystBypass());
         st(m, Category.BASE_RAID, "Tunnel Base Finder", "b:Follow Sus Chunks:true", "n:Scan Radius:64:16:256:8", "m:Move:Walk:Walk|Fly");
         st(m, Category.BASE_RAID, "Media Base Finder", "n:Min Storage:8:1:64:1", "n:Radius:96:16:256:8");
