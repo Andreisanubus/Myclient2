@@ -5,7 +5,10 @@
 
 package dev.myclient.module.modules;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 import dev.myclient.chunkfinder.ChunkFinderScanner;
@@ -20,7 +23,6 @@ import dev.myclient.render.Proj;
 import dev.myclient.util.Colors;
 
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.text.Text;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Vec3d;
@@ -31,22 +33,19 @@ public final class ChunkFinderModule extends Module {
     private final ChunkFinderScanner scanner = new ChunkFinderScanner();
 
     private final NumberSetting rescanDelay =
-            num("Rescan Delay", 40, 10, 200, 10);
+            num("Rescan Delay", 100, 20, 400, 20);
 
     private final NumberSetting renderDistance =
-            num("Render Distance", 64, 8, 256, 8);
+            num("Render Distance", 64, 16, 256, 16);
+
+    private final NumberSetting globalYLevel =
+            num("Global Y Level", 64, -64, 320, 1);
 
     private final Setting<Boolean> showFill =
             bool("Show Fill", true);
 
     private final Setting<Boolean> showOutline =
             bool("Show Outline", true);
-
-    private final Setting<Boolean> showCornerPillars =
-            bool("Show Corner Pillars", true);
-
-    private final NumberSetting pillarHeight =
-            num("Pillar Height", 4, 1, 32, 1);
 
     private final Map<SuspectObjects.Category, DetectionSettings> detectionSettings =
             new EnumMap<>(SuspectObjects.Category.class);
@@ -55,28 +54,24 @@ public final class ChunkFinderModule extends Module {
     private int lastChunkX = Integer.MIN_VALUE;
     private int lastChunkZ = Integer.MIN_VALUE;
 
+    private static final double BAND_HEIGHT = 0.12;
+
     private static final class DetectionSettings {
         final Setting<Boolean> enabled;
         final ModeSetting color;
         final NumberSetting opacity;
         final Setting<Boolean> outline;
-        final Setting<Boolean> customY;
-        final NumberSetting yLevel;
 
         DetectionSettings(
                 Setting<Boolean> enabled,
                 ModeSetting color,
                 NumberSetting opacity,
-                Setting<Boolean> outline,
-                Setting<Boolean> customY,
-                NumberSetting yLevel
+                Setting<Boolean> outline
         ) {
             this.enabled = enabled;
             this.color = color;
             this.opacity = opacity;
             this.outline = outline;
-            this.customY = customY;
-            this.yLevel = yLevel;
         }
     }
 
@@ -86,10 +81,9 @@ public final class ChunkFinderModule extends Module {
         header("General");
         add(rescanDelay);
         add(renderDistance);
+        add(globalYLevel);
         add(showFill);
         add(showOutline);
-        add(showCornerPillars);
-        add(pillarHeight);
 
         for (SuspectObjects.Category category : SuspectObjects.Category.values()) {
             if (category == SuspectObjects.Category.GEODES
@@ -118,19 +112,11 @@ public final class ChunkFinderModule extends Module {
         Setting<Boolean> outline =
                 bool(prefix + "Outline", true);
 
-        Setting<Boolean> customY =
-                bool(prefix + "Custom Y", false);
-
-        NumberSetting yLevel =
-                num(prefix + "Y Level", 64, -64, 320, 1);
-
         DetectionSettings settings = new DetectionSettings(
                 enabled,
                 color,
                 opacity,
-                outline,
-                customY,
-                yLevel
+                outline
         );
 
         detectionSettings.put(category, settings);
@@ -139,8 +125,6 @@ public final class ChunkFinderModule extends Module {
         add(color);
         add(opacity);
         add(outline);
-        add(customY);
-        add(yLevel);
     }
 
     private static String closestColor(int color) {
@@ -198,47 +182,70 @@ public final class ChunkFinderModule extends Module {
 
         ChunkPos playerChunk = mc.player.getChunkPos();
 
-        int chunkX = playerChunk.x;
-        int chunkZ = playerChunk.z;
+        int centerX = playerChunk.x;
+        int centerZ = playerChunk.z;
 
-        boolean changed = chunkX != lastChunkX || chunkZ != lastChunkZ;
+        boolean changed = centerX != lastChunkX || centerZ != lastChunkZ;
 
         if (!changed && ticks < rescanDelay.asInt()) {
             return;
         }
 
-        WorldChunk chunk = mc.world.getChunkManager()
-                .getWorldChunk(chunkX, chunkZ);
+        double distance = renderDistance.get();
+        double distanceSquared = distance * distance;
 
-        if (chunk == null) {
-            return;
+        int radiusChunks = (int) Math.ceil(distance / 16.0);
+
+        // Scan nearby loaded chunks, but never scan the player's current chunk.
+        for (int offsetX = -radiusChunks;
+             offsetX <= radiusChunks;
+             offsetX++) {
+
+            for (int offsetZ = -radiusChunks;
+                 offsetZ <= radiusChunks;
+                 offsetZ++) {
+
+                int chunkX = centerX + offsetX;
+                int chunkZ = centerZ + offsetZ;
+
+                if (chunkX == centerX && chunkZ == centerZ) {
+                    continue;
+                }
+
+                double chunkCenterX = chunkX * 16.0 + 8.0;
+                double chunkCenterZ = chunkZ * 16.0 + 8.0;
+
+                double dx = chunkCenterX - mc.player.getX();
+                double dz = chunkCenterZ - mc.player.getZ();
+
+                if (dx * dx + dz * dz > distanceSquared) {
+                    continue;
+                }
+
+                WorldChunk chunk = mc.world.getChunkManager()
+                        .getWorldChunk(chunkX, chunkZ);
+
+                // Do not request or force-load chunks.
+                if (chunk == null) {
+                    continue;
+                }
+
+                scanner.scan(mc.world, chunk);
+            }
         }
 
-        Report report = scanner.scan(mc.world, chunk);
+        scanner.forgetOutside(
+                centerX,
+                centerZ,
+                radiusChunks + 1
+        );
 
-        if (report == null) {
-            return;
-        }
+        // Make sure the current player chunk is never displayed.
+        scanner.forget(centerX, centerZ);
 
-        lastChunkX = chunkX;
-        lastChunkZ = chunkZ;
+        lastChunkX = centerX;
+        lastChunkZ = centerZ;
         ticks = 0;
-
-        if (changed) {
-            mc.player.sendMessage(
-                    Text.literal(
-                            "[Chunk Finder] Chunk "
-                                    + chunkX + ", " + chunkZ
-                                    + " | Activity clues: "
-                                    + report.activityScore()
-                                    + " | Geode glow: "
-                                    + report.geodeGlowCount
-                                    + " | Markers: "
-                                    + report.markers.size()
-                    ),
-                    false
-            );
-        }
     }
 
     @Override
@@ -247,60 +254,103 @@ public final class ChunkFinderModule extends Module {
             return;
         }
 
-        ChunkPos playerChunk = mc.player.getChunkPos();
-
-        Report report = scanner.get(playerChunk.x, playerChunk.z);
-
-        if (report == null || report.markers.isEmpty()) {
-            return;
-        }
-
         Vec3d camera = Proj.camPos();
+
         double maxDistance = renderDistance.get();
         double maxDistanceSquared = maxDistance * maxDistance;
 
-        for (SuspectObjects.Marker marker : report.markers) {
+        double y = globalYLevel.get();
+
+        for (Report report : scanner.getReports().values()) {
+            // Never draw the chunk the player currently occupies.
+            if (report.chunkX == mc.player.getChunkPos().x
+                    && report.chunkZ == mc.player.getChunkPos().z) {
+                continue;
+            }
+
+            double chunkStartX = report.chunkX * 16.0;
+            double chunkStartZ = report.chunkZ * 16.0;
+
+            double centerX = chunkStartX + 8.0;
+            double centerZ = chunkStartZ + 8.0;
+
+            double dx = centerX - camera.x;
+            double dz = centerZ - camera.z;
+
+            if (dx * dx + dz * dz > maxDistanceSquared) {
+                continue;
+            }
+
+            List<SuspectObjects.Marker> activeMarkers = new ArrayList<>();
+
+            for (SuspectObjects.Marker marker : report.markers) {
+                DetectionSettings settings =
+                        detectionSettings.get(marker.category());
+
+                if (settings != null && settings.enabled.value) {
+                    activeMarkers.add(marker);
+                }
+            }
+
+            if (activeMarkers.isEmpty()) {
+                continue;
+            }
+
+            activeMarkers.sort(
+                    Comparator.comparingInt(
+                            marker -> marker.category().ordinal()
+                    )
+            );
+
+            drawChunkBand(
+                    context,
+                    activeMarkers,
+                    chunkStartX,
+                    chunkStartZ,
+                    y
+            );
+        }
+    }
+
+    private void drawChunkBand(
+            DrawContext context,
+            List<SuspectObjects.Marker> markers,
+            double chunkStartX,
+            double chunkStartZ,
+            double y
+    ) {
+        /*
+         * All category segments together form one clean band:
+         * 16 blocks wide, 1 block long and 0.12 blocks high.
+         *
+         * Each detected category receives its own color.
+         */
+        double segmentWidth = 16.0 / markers.size();
+
+        for (int i = 0; i < markers.size(); i++) {
+            SuspectObjects.Marker marker = markers.get(i);
+
             DetectionSettings settings =
                     detectionSettings.get(marker.category());
 
-            if (settings == null || !settings.enabled.value) {
+            if (settings == null) {
                 continue;
             }
 
-            Box original = marker.bounds();
+            double minX = chunkStartX + segmentWidth * i;
+            double maxX = chunkStartX + segmentWidth * (i + 1);
 
-            double centerX = (original.minX + original.maxX) * 0.5;
-            double centerY = (original.minY + original.maxY) * 0.5;
-            double centerZ = (original.minZ + original.maxZ) * 0.5;
-
-            double dx = centerX - camera.x;
-            double dy = centerY - camera.y;
-            double dz = centerZ - camera.z;
-
-            if (dx * dx + dy * dy + dz * dz > maxDistanceSquared) {
-                continue;
-            }
-
-            Box bounds = original;
-
-            if (settings.customY.value) {
-                double newY = settings.yLevel.get();
-                double originalHeight = Math.max(
-                        1.0,
-                        original.maxY - original.minY
-                );
-
-                bounds = new Box(
-                        original.minX,
-                        newY,
-                        original.minZ,
-                        original.maxX,
-                        newY + originalHeight,
-                        original.maxZ
-                );
-            }
+            Box band = new Box(
+                    minX,
+                    y,
+                    chunkStartZ,
+                    maxX,
+                    y + BAND_HEIGHT,
+                    chunkStartZ + 1.0
+            );
 
             int color = Colors.of(settings.color.value);
+
             int opacity = (int) Math.round(
                     settings.opacity.get() * 255.0 / 100.0
             );
@@ -308,7 +358,7 @@ public final class ChunkFinderModule extends Module {
             if (showFill.value && opacity > 0) {
                 Proj.fillBox3D(
                         context,
-                        bounds,
+                        band,
                         color,
                         opacity
                 );
@@ -317,46 +367,28 @@ public final class ChunkFinderModule extends Module {
             if (showOutline.value && settings.outline.value) {
                 Proj.boxEdges(
                         context,
-                        bounds,
-                        Proj.alpha(color, 255)
+                        band,
+                        Proj.alpha(color, 235)
                 );
             }
 
-            if (showCornerPillars.value) {
-                drawCornerPillars(
+            // A fine highlight line gives the segment a cleaner appearance.
+            if (segmentWidth > 0.5) {
+                Proj.line3(
                         context,
-                        bounds,
-                        color,
-                        pillarHeight.get()
+                        new Vec3d(
+                                minX + 0.2,
+                                y + BAND_HEIGHT,
+                                chunkStartZ + 0.5
+                        ),
+                        new Vec3d(
+                                maxX - 0.2,
+                                y + BAND_HEIGHT,
+                                chunkStartZ + 0.5
+                        ),
+                        Proj.alpha(color, 210)
                 );
             }
-        }
-    }
-
-    private void drawCornerPillars(
-            DrawContext context,
-            Box bounds,
-            int color,
-            double height
-    ) {
-        double pillarTop = bounds.maxY + height;
-
-        int pillarColor = Proj.alpha(color, 220);
-
-        double[][] corners = {
-                {bounds.minX, bounds.minZ},
-                {bounds.maxX, bounds.minZ},
-                {bounds.minX, bounds.maxZ},
-                {bounds.maxX, bounds.maxZ}
-        };
-
-        for (double[] corner : corners) {
-            Proj.line3(
-                    context,
-                    new Vec3d(corner[0], bounds.minY, corner[1]),
-                    new Vec3d(corner[0], pillarTop, corner[1]),
-                    pillarColor
-            );
         }
     }
 
