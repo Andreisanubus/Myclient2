@@ -1,26 +1,22 @@
 
 // SPDX-License-Identifier: GPL-3.0-only
-// Adapted from Spectre 26.2 by 4ldenz.
-// See docs/spectre-base-finder-port.md.
-
+// Adapted from Spectre 26.2 by 4ldenz. See docs/spectre-base-finder-port.md.
 package dev.myclient.chunkfinder;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.Map;
+import java.util.StringJoiner;
 
 import net.minecraft.block.BeehiveBlock;
-import net.minecraft.block.Blocks;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 
 /**
- * Conservative vanilla generation clues.
- * These clues are not a probability that a base exists.
+ * Conservative vanilla generation clues, not a probability that a base exists.
  */
 public final class ActivityClues {
 
-    private ActivityClues() {
-    }
+    private ActivityClues() {}
 
     public enum Kind {
         KELP("Kelp"),
@@ -74,14 +70,13 @@ public final class ActivityClues {
     }
 
     public static final class Summary {
-
         private final EnumMap<Kind, Integer> counts = new EnumMap<>(Kind.class);
 
         private int honeyNests;
         private int hives;
 
         public void add(BlockState state) {
-            Kind kind = ActivityClues.kind(state);
+            Kind kind = kind(state);
 
             if (kind == null) {
                 return;
@@ -100,7 +95,7 @@ public final class ActivityClues {
         }
 
         // Plant age states are not length measurements.
-        // Spatial growth checks belong in SuspectObjects.
+        // Spatial growth checks live in SuspectObjects.
         public int score() {
             return Math.min(4, honeyNests * 2)
                     + Math.min(4, hives * 4);
@@ -115,7 +110,7 @@ public final class ActivityClues {
         }
 
         public String evidence() {
-            ArrayList<String> lines = new ArrayList<>();
+            var lines = new ArrayList<String>();
 
             if (honeyNests > 0) {
                 lines.add("Nests with honey: " + honeyNests);
@@ -131,12 +126,12 @@ public final class ActivityClues {
         }
 
         public String context() {
-            ArrayList<String> lines = new ArrayList<>();
+            var joiner = new StringJoiner(" / ");
 
             counts.forEach((kind, count) ->
-                    lines.add(kind.label + ": " + count));
+                    joiner.add(kind.label + ": " + count));
 
-            return String.join(" / ", lines);
+            return joiner.toString();
         }
     }
 }
