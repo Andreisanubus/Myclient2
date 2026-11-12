@@ -42,6 +42,12 @@ public final class ChunkFinderModule extends Module {
     private final Setting<Boolean> distanceFade =
             bool("Distance Fade", true);
 
+    private final Setting<Boolean> showGlow =
+            bool("Glow", true);
+
+    private final NumberSetting glowIntensity =
+            num("Glow Intensity", 0.65, 0.1, 1.0, 0.05);
+
     private final Map<SuspectObjects.Category, DetectionSettings>
             detectionSettings =
             new EnumMap<>(SuspectObjects.Category.class);
@@ -73,6 +79,10 @@ public final class ChunkFinderModule extends Module {
         add(showFill);
         add(showOutline);
         add(distanceFade);
+
+        header("Glow");
+        add(showGlow);
+        add(glowIntensity);
 
         for (SuspectObjects.Category category
                 : SuspectObjects.Category.values()) {
@@ -182,6 +192,9 @@ public final class ChunkFinderModule extends Module {
         double playerY = mc.player.getY();
         double playerZ = mc.player.getZ();
 
+        int currentChunkX = mc.player.getChunkPos().x;
+        int currentChunkZ = mc.player.getChunkPos().z;
+
         for (SuspectObjects.Category category
                 : SuspectObjects.Category.values()) {
 
@@ -206,7 +219,9 @@ public final class ChunkFinderModule extends Module {
                             positions,
                             playerX,
                             playerY,
-                            playerZ
+                            playerZ,
+                            currentChunkX,
+                            currentChunkZ
                     );
 
             if (nearestDistanceSquared > maxDistanceSquared) {
@@ -248,7 +263,9 @@ public final class ChunkFinderModule extends Module {
                     fillColor,
                     outlineColor,
                     showFill.value && opacity > 0,
-                    showOutline.value && settings.outline.value
+                    showOutline.value && settings.outline.value,
+                    showGlow.value,
+                    glowIntensity.get() * fade
             );
         }
     }
@@ -257,11 +274,18 @@ public final class ChunkFinderModule extends Module {
             List<BlockPos> positions,
             double playerX,
             double playerY,
-            double playerZ
+            double playerZ,
+            int currentChunkX,
+            int currentChunkZ
     ) {
         double nearest = Double.MAX_VALUE;
 
         for (BlockPos pos : positions) {
+            if ((pos.getX() >> 4) == currentChunkX
+                    && (pos.getZ() >> 4) == currentChunkZ) {
+                continue;
+            }
+
             double dx = pos.getX() + 0.5 - playerX;
             double dy = pos.getY() + 0.5 - playerY;
             double dz = pos.getZ() + 0.5 - playerZ;
