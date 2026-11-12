@@ -1,7 +1,6 @@
 
 package dev.myclient.module.modules;
 
-import dev.myclient.chunkfinder.BlockClusterGlow;
 import dev.myclient.chunkfinder.BlockClusterRenderer;
 import dev.myclient.chunkfinder.BlockLayer;
 import dev.myclient.chunkfinder.BlockLayerConsumer;
@@ -26,10 +25,14 @@ import java.util.Map;
 
 public final class ChunkFinderModule extends Module {
 
+    private static final long REVEAL_DURATION_NANOS = 600_000_000L;
+
     private final BlockLayer layer = new BlockLayer();
 
     private final BlockLayerConsumer consumer =
             new BlockLayerConsumer(layer);
+
+    private long revealStartNanos;
 
     private final NumberSetting renderDistance =
             num("Render Distance", 128, 16, 256, 16);
@@ -40,8 +43,20 @@ public final class ChunkFinderModule extends Module {
     private final Setting<Boolean> showOutline =
             bool("Show Outline", true);
 
+    private final NumberSetting fillAlpha =
+            num("Fill Alpha", 100, 0, 100, 5);
+
+    private final NumberSetting boxSize =
+            num("Box Size", 1.0, 0.1, 2.0, 0.1);
+
+    private final NumberSetting lineWidth =
+            num("Line Width", 1, 1, 5, 1);
+
     private final Setting<Boolean> distanceFade =
             bool("Distance Fade", true);
+
+    private final Setting<Boolean> revealAnimation =
+            bool("Reveal Animation", true);
 
     private final Setting<Boolean> showGlow =
             bool("Glow", true);
@@ -52,11 +67,18 @@ public final class ChunkFinderModule extends Module {
     private final Setting<Boolean> showTracers =
             bool("Tracers", false);
 
+    private final NumberSetting tracerWidth =
+            num("Tracer Width", 1, 1, 5, 1);
+
+    private final NumberSetting maxTracers =
+            num("Max Tracers", 256, 16, 256, 16);
+
     private final Map<SuspectObjects.Category, DetectionSettings>
             detectionSettings =
             new EnumMap<>(SuspectObjects.Category.class);
 
     private static final class DetectionSettings {
+
         final Setting<Boolean> enabled;
         final ModeSetting color;
         final NumberSetting opacity;
@@ -82,12 +104,20 @@ public final class ChunkFinderModule extends Module {
         add(renderDistance);
         add(showFill);
         add(showOutline);
+        add(fillAlpha);
+        add(boxSize);
+        add(lineWidth);
         add(distanceFade);
-        add(showTracers);
+        add(revealAnimation);
 
         header("Glow");
         add(showGlow);
         add(glowIntensity);
+
+        header("Tracers");
+        add(showTracers);
+        add(tracerWidth);
+        add(maxTracers);
 
         for (SuspectObjects.Category category
                 : SuspectObjects.Category.values()) {
@@ -168,6 +198,7 @@ public final class ChunkFinderModule extends Module {
     @Override
     protected void onEnable() {
         layer.clear();
+        revealStartNanos = System.nanoTime();
         ChunkScanner.register(consumer);
     }
 
@@ -200,8 +231,8 @@ public final class ChunkFinderModule extends Module {
         double playerY = mc.player.getY();
         double playerZ = mc.player.getZ();
 
-        // Resetăm ambele bugete o singură dată pe frame.
-        BlockClusterGlow.beginFrame();
+        double reveal = getRevealProgress();
+
         BlockClusterRenderer.beginFrame();
 
         for (SuspectObjects.Category category
@@ -241,46 +272,99 @@ public final class ChunkFinderModule extends Module {
 
             double distance = Math.sqrt(nearestDistanceSquared);
 
-            double fade = 1.0;
+            double fade = distanceFade.value
+                    ? calculateDistanceFade(distance, maxDistance)
+                    : 1.0;
 
-            if (distanceFade.value) {
-                double fadeStart = maxDistance * 0.70;
+            double visibility = fade * reveal;
 
-                if (distance > fadeStart) {
-                    fade = 1.0 - (
-                            (distance - fadeStart)
-                                    / Math.max(1.0, maxDistance - fadeStart)
-                    );
-
-                    fade = Math.max(0.0, Math.min(1.0, fade));
-                }
+            if (visibility <= 0.0) {
+                continue;
             }
 
             int color = Colors.of(settings.color.value);
 
-            int opacity = (int) Math.round(
-                    settings.opacity.get() * 255.0 / 100.0 * fade
+            double categoryOpacity =
+                    settings.opacity.get() / 100.0;
+
+            double globalFillOpacity =
+                    fillAlpha.get() / 100.0;
+
+            int fillOpacity = clampAlpha(
+                    255.0
+                            * categoryOpacity
+                            * globalFillOpacity
+                            * visibility
             );
 
-            int fillColor = Proj.alpha(color, opacity);
-
-            int outlineColor = Proj.alpha(
-                    color,
-                    (int) Math.round(235.0 * fade)
+            int outlineOpacity = clampAlpha(
+                    235.0 * visibility
             );
+
+            int fillColor = Proj.alpha(color, fillOpacity);
+            int outlineColor = Proj.alpha(color, outlineOpacity);
 
             BlockClusterRenderer.render(
                     context,
                     geometry,
                     fillColor,
                     outlineColor,
-                    showFill.value && opacity > 0,
-                    showOutline.value && settings.outline.value,
+                    showFill.value && fillOpacity > 0,
+                    showOutline.value && settings.outline.value
+                            && outlineOpacity > 0,
                     showGlow.value,
-                    glowIntensity.get() * fade,
-                    showTracers.value
+                    glowIntensity.get() * visibility,
+                    showTracers.value,
+                    boxSize.get(),
+                    (int) Math.round(lineWidth.get()),
+                    (int) Math.round(tracerWidth.get()),
+                    (int) Math.round(maxTracers.get())
             );
         }
+    }
+
+    private double getRevealProgress() {
+        if (!revealAnimation.value) {
+            return 1.0;
+        }
+
+        long elapsed = Math.max(
+                0L,
+                System.nanoTime() - revealStartNanos
+        );
+
+        double progress = elapsed
+                / (double) REVEAL_DURATION_NANOS;
+
+        return Math.max(0.0, Math.min(1.0, progress));
+    }
+
+    private static double calculateDistanceFade(
+            double distance,
+            double maxDistance
+    ) {
+        double fadeStart = maxDistance * 0.70;
+
+        if (distance <= fadeStart) {
+            return 1.0;
+        }
+
+        double range = Math.max(1.0, maxDistance - fadeStart);
+
+        double progress = (distance - fadeStart) / range;
+        progress = Math.max(0.0, Math.min(1.0, progress));
+
+        double smooth = progress * progress
+                * (3.0 - 2.0 * progress);
+
+        return 1.0 - smooth;
+    }
+
+    private static int clampAlpha(double value) {
+        return (int) Math.max(
+                0,
+                Math.min(255, Math.round(value))
+        );
     }
 
     private static double nearestDistanceSquared(
