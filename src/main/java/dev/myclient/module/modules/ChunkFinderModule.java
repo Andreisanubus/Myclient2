@@ -14,7 +14,6 @@ import dev.myclient.module.Setting;
 import dev.myclient.render.Proj;
 import dev.myclient.util.Colors;
 
-import net.minecraft.client.gui.DrawContext;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
@@ -185,15 +184,15 @@ public final class ChunkFinderModule extends Module {
         RegistryKey<World> dimension =
                 mc.world.getRegistryKey();
 
+        int currentChunkX = mc.player.getChunkPos().x;
+        int currentChunkZ = mc.player.getChunkPos().z;
+
         double maxDistance = renderDistance.get();
         double maxDistanceSquared = maxDistance * maxDistance;
 
         double playerX = mc.player.getX();
         double playerY = mc.player.getY();
         double playerZ = mc.player.getZ();
-
-        int currentChunkX = mc.player.getChunkPos().x;
-        int currentChunkZ = mc.player.getChunkPos().z;
 
         for (SuspectObjects.Category category
                 : SuspectObjects.Category.values()) {
@@ -205,8 +204,12 @@ public final class ChunkFinderModule extends Module {
                 continue;
             }
 
-            BlockLayer.Geometry geometry =
-                    layer.geometry(dimension, category);
+            BlockLayer.Geometry geometry = layer.geometry(
+                    dimension,
+                    category,
+                    currentChunkX,
+                    currentChunkZ
+            );
 
             List<BlockPos> positions = geometry.positions();
 
@@ -219,9 +222,7 @@ public final class ChunkFinderModule extends Module {
                             positions,
                             playerX,
                             playerY,
-                            playerZ,
-                            currentChunkX,
-                            currentChunkZ
+                            playerZ
                     );
 
             if (nearestDistanceSquared > maxDistanceSquared) {
@@ -252,6 +253,7 @@ public final class ChunkFinderModule extends Module {
             );
 
             int fillColor = Proj.alpha(color, opacity);
+
             int outlineColor = Proj.alpha(
                     color,
                     (int) Math.round(235.0 * fade)
@@ -274,18 +276,11 @@ public final class ChunkFinderModule extends Module {
             List<BlockPos> positions,
             double playerX,
             double playerY,
-            double playerZ,
-            int currentChunkX,
-            int currentChunkZ
+            double playerZ
     ) {
         double nearest = Double.MAX_VALUE;
 
         for (BlockPos pos : positions) {
-            if ((pos.getX() >> 4) == currentChunkX
-                    && (pos.getZ() >> 4) == currentChunkZ) {
-                continue;
-            }
-
             double dx = pos.getX() + 0.5 - playerX;
             double dy = pos.getY() + 0.5 - playerY;
             double dz = pos.getZ() + 0.5 - playerZ;
