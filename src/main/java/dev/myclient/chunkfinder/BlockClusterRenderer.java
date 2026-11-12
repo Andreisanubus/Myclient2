@@ -1,6 +1,8 @@
 
 package dev.myclient.chunkfinder;
 
+import dev.myclient.render.Proj;
+
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
@@ -18,25 +20,52 @@ public final class BlockClusterRenderer {
             boolean showFill,
             boolean showOutline
     ) {
-        if (context == null || geometry == null) {
+        render(
+                context,
+                geometry,
+                fillColor,
+                outlineColor,
+                showFill,
+                showOutline,
+                false,
+                0.0
+        );
+    }
+
+    public static void render(
+            DrawContext context,
+            BlockLayer.Geometry geometry,
+            int fillColor,
+            int outlineColor,
+            boolean showFill,
+            boolean showOutline,
+            boolean showGlow,
+            double glowIntensity
+    ) {
+        if (context == null || geometry == null || geometry.mesh() == null) {
             return;
         }
 
         BlockClusterGeometry.Mesh mesh = geometry.mesh();
 
-        if (mesh == null) {
-            return;
+        if (showGlow) {
+            BlockClusterGlow.render(
+                    context,
+                    mesh,
+                    outlineColor & 0xFFFFFF,
+                    glowIntensity
+            );
         }
 
         if (showFill) {
             for (BlockClusterGeometry.Face face : mesh.faces()) {
-                ProjFill(context, face, fillColor);
+                renderFace(context, face, fillColor);
             }
         }
 
         if (showOutline) {
             for (BlockClusterGeometry.Segment edge : mesh.edges()) {
-                dev.myclient.render.Proj.line3(
+                Proj.line3(
                         context,
                         edge.start(),
                         edge.end(),
@@ -46,7 +75,7 @@ public final class BlockClusterRenderer {
         }
     }
 
-    private static void ProjFill(
+    private static void renderFace(
             DrawContext context,
             BlockClusterGeometry.Face face,
             int color
@@ -101,10 +130,6 @@ public final class BlockClusterRenderer {
             };
         };
 
-        dev.myclient.render.Proj.fillPoly(
-                context,
-                vertices,
-                color
-        );
+        Proj.fillPoly(context, vertices, color);
     }
 }
