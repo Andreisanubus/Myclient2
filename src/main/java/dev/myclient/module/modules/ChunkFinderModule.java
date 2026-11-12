@@ -49,6 +49,9 @@ public final class ChunkFinderModule extends Module {
     private final NumberSetting glowIntensity =
             num("Glow Intensity", 0.65, 0.1, 1.0, 0.05);
 
+    private final Setting<Boolean> showTracers =
+            bool("Tracers", false);
+
     private final Map<SuspectObjects.Category, DetectionSettings>
             detectionSettings =
             new EnumMap<>(SuspectObjects.Category.class);
@@ -80,6 +83,7 @@ public final class ChunkFinderModule extends Module {
         add(showFill);
         add(showOutline);
         add(distanceFade);
+        add(showTracers);
 
         header("Glow");
         add(showGlow);
@@ -196,8 +200,9 @@ public final class ChunkFinderModule extends Module {
         double playerY = mc.player.getY();
         double playerZ = mc.player.getZ();
 
-        // Resetăm bugetul o singură dată pentru întregul frame.
+        // Resetăm ambele bugete o singură dată pe frame.
         BlockClusterGlow.beginFrame();
+        BlockClusterRenderer.beginFrame();
 
         for (SuspectObjects.Category category
                 : SuspectObjects.Category.values()) {
@@ -272,7 +277,8 @@ public final class ChunkFinderModule extends Module {
                     showFill.value && opacity > 0,
                     showOutline.value && settings.outline.value,
                     showGlow.value,
-                    glowIntensity.get() * fade
+                    glowIntensity.get() * fade,
+                    showTracers.value
             );
         }
     }
