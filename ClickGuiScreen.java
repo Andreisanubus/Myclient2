@@ -14,6 +14,7 @@ import dev.myclient.module.ModuleManager;
 import dev.myclient.module.NumberSetting;
 import dev.myclient.module.Setting;
 import dev.myclient.module.StringSetting;
+import dev.myclient.util.Colors;
 import dev.myclient.util.Keys;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
@@ -41,7 +42,8 @@ public class ClickGuiScreen extends Screen {
     private final Box editBox = new Box();
     private StringSetting editing;
     private Box focus;
-    private Module binding, expanded;
+    private Module binding, winMod;
+    private int winSec, winScroll, winContentH, wx, wy, ww, wh;
     private Slider dragging;
     private HudModule dragHud;
     private int dragDX, dragDY;
@@ -111,6 +113,7 @@ public class ClickGuiScreen extends Screen {
             default -> configTab(c, mx, my);
         }
         tabBar(c, mx, my);
+        if (winMod != null) { hits.clear(); sliders.clear(); drawWindow(c, mx, my); }
         if (System.currentTimeMillis() < statusUntil) txt(c, status, (width - tw(status)) / 2, height - 40, WHITE);
     }
 
@@ -168,93 +171,194 @@ public class ClickGuiScreen extends Screen {
         for (Module m : results()) ry += moduleBlock(c, m, x + 4, ry, w - 8, mx, my);
     }
 
-    private List<Setting<?>> vis(Module m) {
-        List<Setting<?>> l = new ArrayList<>();
-        for (Setting<?> s : m.settings) if (s.visible.getAsBoolean()) l.add(s);
-        return l;
+    // ---- randul unui modul: click stanga = porneste/opreste, click dreapta sau "..." = fereastra de setari
+    private int blockHeight(Module m) { return 16; }
+
+    private boolean hasSettings(Module m) {
+        for (Setting<?> s : m.settings) if (!(s instanceof HeaderSetting)) return true;
+        return false;
     }
 
-    private int blockHeight(Module m) {
-        if (expanded != m) return 16;
-        int h = 16;
-        for (Setting<?> s : vis(m)) h += s instanceof NumberSetting ? 22 : s instanceof HeaderSetting ? 12 : 16;
-        return h + 16 + 16 + 2;
-    }
+    private void openWin(Module m) { winMod = m; winSec = 0; winScroll = 0; focus = null; editing = null; }
 
     private int moduleBlock(DrawContext c, Module m, int x, int y, int w, int mx, int my) {
-        boolean on = m.isEnabled(), ex = expanded == m;
+        boolean on = m.isEnabled(), has = hasSettings(m);
         int r = Math.max(1, Theme.radius / 2);
         if (on) RenderUtil.roundedRect(c, x, y, w, 15, r, Theme.accent);
         else if (in(mx, my, x, y, w, 15)) RenderUtil.roundedRect(c, x, y, w, 15, r, 0x22FFFFFF);
-
         String label = m.implemented() ? m.name : m.name + "*";
-        txt(c, textRenderer.trimToWidth(label, w - 16), x + 4, y + 4, on ? WHITE : (m.implemented() ? GRAY : DIM));
-        if (!m.settings.isEmpty()) txt(c, ex ? "-" : "+", x + w - 9, y + 4, on ? WHITE : DIM);
-        hit(x, y, w, 15, m::toggle, () -> expanded = ex ? null : m);
+        txt(c, textRenderer.trimToWidth(label, w - (has ? 20 : 8)), x + 4, y + 4, on ? WHITE : (m.implemented() ? GRAY : DIM));
+        if (has) {
+            int dx = x + w - 14;
+            txt(c, "...", x + w - 13, y + 3, in(mx, my, dx, y, 14, 15) ? WHITE : (on ? 0xFFDDEBFF : DIM));
+            hit(dx, y, 14, 15, () -> openWin(m), () -> openWin(m));
+        }
+        hit(x, y, w, 15, m::toggle, () -> openWin(m));
+        return 16;
+    }
 
-        if (!ex) return 16;
+    // ------------------------------------------------------------ FEREASTRA DE SETARI
+    private record Sec(String title, List<Setting<?>> items) {}
 
-        int total = blockHeight(m);
-        RenderUtil.roundedRect(c, x, y + 16, w, total - 18, 3, 0x22FFFFFF);
-        int ix = x + 3, iw = w - 6, cy = y + 17;
-        for (Setting<?> s : vis(m)) cy += settingRow(c, s, ix, cy, iw, mx, my);
+    private List<Sec> sections(Module m) {
+        List<Sec> out = new ArrayList<>();
+        Sec cur = null;
+        for (Setting<?> s : m.settings) {
+            if (s instanceof HeaderSetting h) { cur = new Sec(h.value, new ArrayList<>()); out.add(cur); continue; }
+            if (!s.visible.getAsBoolean()) continue;
+            if (cur == null) { cur = new Sec("General", new ArrayList<>()); out.add(cur); }
+            cur.items().add(s);
+        }
+        out.removeIf(x -> x.items().isEmpty());
+        return out;
+    }
 
-        String k = binding == m ? "..." : Keys.name(m.key);
-        txt(c, "Bind", ix + 3, cy + 3, GRAY);
-        txt(c, k, ix + iw - tw(k) - 3, cy + 3, WHITE);
-        hit(ix, cy, iw, 14, () -> binding = m, () -> m.key = -1);
-        cy += 16;
-
-        int bw = (iw - 3) / 2;
-        button(c, ix, cy, bw, 13, "Copy Config", mx, my, () -> {
-            Keys.setClipboard(ConfigManager.exportModule(m));
-            say("Config copiat: " + m.name);
-        });
-        button(c, ix + bw + 3, cy, bw, 13, "Paste Config", mx, my,
-                () -> say(ConfigManager.importModule(m, Keys.getClipboard()) ? "Config lipit: " + m.name : "Cod invalid pentru " + m.name));
-        return total;
+    private static boolean isColor(ModeSetting ms) {
+        return ms.modes.size() == Colors.NAMES.length && ms.modes.get(0).equals(Colors.NAMES[0]);
     }
 
     @SuppressWarnings("unchecked")
-    private int settingRow(DrawContext c, Setting<?> s, int x, int y, int w, int mx, int my) {
-        if (s instanceof HeaderSetting hs) { txt(c, hs.value.toUpperCase(), x + 3, y + 3, DIM); return 12; }
-        String label = textRenderer.trimToWidth(s.name, w - 34);
+    private void resetModule(Module m) {
+        for (Setting<?> s : m.settings) if (!(s instanceof HeaderSetting)) ((Setting<Object>) s).value = s.def;
+        say("Resetat: " + m.name);
+    }
+
+    private int viewTop, viewBot;
+
+    /** Hit taiat la zona vizibila a continutului (ca sa nu se apese sub titlu sau sub butoane). */
+    private void chit(int x, int y, int w, int h, Runnable l, Runnable r) {
+        int y0 = Math.max(y, viewTop), y1 = Math.min(y + h, viewBot);
+        if (y1 > y0) hit(x, y0, w, y1 - y0, l, r);
+    }
+
+    private void drawWindow(DrawContext c, int mx, int my) {
+        Module m = winMod;
+        c.fill(0, 0, width, height, 0x88000000);
+        ww = Math.min(width - 20, 420);
+        wh = Math.min(height - 46, 270);
+        wx = (width - ww) / 2;
+        wy = Math.max(6, (height - 34 - wh) / 2);
+        RenderUtil.roundedRect(c, wx, wy, ww, wh, Theme.radius, 0xF20C0C0E);
+
+        // titlu: nume, Activ, Bind, inchidere
+        txt(c, m.name + (m.implemented() ? "" : "  (fara logica inca)"), wx + 10, wy + 9, WHITE);
+        int xr = wx + ww - 20;
+        button(c, xr, wy + 5, 14, 14, "x", mx, my, () -> { winMod = null; binding = null; });
+        String bl = "Bind: " + (binding == m ? "..." : Keys.name(m.key));
+        int bw = tw(bl) + 12, bx = xr - bw - 6;
+        button(c, bx, wy + 5, bw, 14, bl, mx, my, () -> binding = m);
+        hit(bx, wy + 5, bw, 14, null, () -> m.key = -1);
+        int sx = bx - 32;
+        boolean on = m.isEnabled();
+        RenderUtil.roundedRect(c, sx, wy + 7, 22, 10, 5, on ? Theme.accent : 0x33FFFFFF);
+        RenderUtil.roundedRect(c, on ? sx + 13 : sx + 1, wy + 8, 8, 8, 4, WHITE);
+        txt(c, "Activ", sx - tw("Activ") - 6, wy + 9, GRAY);
+        hit(sx - tw("Activ") - 8, wy + 4, tw("Activ") + 40, 16, m::toggle, null);
+        c.fill(wx + 1, wy + 24, wx + ww - 1, wy + 25, 0x22FFFFFF);
+
+        // subsol: Copy / Paste / Reset
+        int fy = wy + wh - 22;
+        c.fill(wx + 1, fy - 2, wx + ww - 1, fy - 1, 0x22FFFFFF);
+        int bx2 = wx + 8;
+        button(c, bx2, fy + 3, 70, 14, "Copy Config", mx, my, () -> { Keys.setClipboard(ConfigManager.exportModule(m)); say("Config copiat: " + m.name); });
+        button(c, bx2 + 74, fy + 3, 74, 14, "Paste Config", mx, my,
+                () -> say(ConfigManager.importModule(m, Keys.getClipboard()) ? "Config lipit: " + m.name : "Cod invalid pentru " + m.name));
+        button(c, bx2 + 152, fy + 3, 44, 14, "Reset", mx, my, () -> resetModule(m));
+        String hint = "doar setarile acestui modul";
+        if (ww > 420 - 10) txt(c, hint, wx + ww - tw(hint) - 8, fy + 7, DIM);
+
+        // bara din stanga: sectiunile
+        List<Sec> secs = sections(m);
+        if (winSec >= secs.size()) winSec = 0;
+        int sy = wy + 30;
+        for (int i = 0; i < secs.size(); i++) {
+            int idx = i;
+            if (i == winSec) RenderUtil.roundedRect(c, wx + 6, sy, 92, 15, Math.max(2, Theme.radius / 2), Theme.accent);
+            else if (in(mx, my, wx + 6, sy, 92, 15)) RenderUtil.roundedRect(c, wx + 6, sy, 92, 15, Math.max(2, Theme.radius / 2), 0x22FFFFFF);
+            txt(c, textRenderer.trimToWidth(secs.get(i).title(), 82), wx + 12, sy + 4, i == winSec ? WHITE : GRAY);
+            hit(wx + 6, sy, 92, 15, () -> { winSec = idx; winScroll = 0; focus = null; editing = null; }, null);
+            sy += 17;
+        }
+        if (secs.isEmpty()) txt(c, "Fara setari", wx + 12, wy + 34, DIM);
+        c.fill(wx + 102, wy + 28, wx + 103, fy - 4, 0x22FFFFFF);
+
+        // continutul sectiunii alese, cu derulare
+        int cx = wx + 110, cw = ww - 120;
+        viewTop = wy + 28;
+        viewBot = fy - 3;
+        if (secs.isEmpty()) {
+            txt(c, "Acest modul nu are setari.", cx, viewTop + 8, DIM);
+            return;
+        }
+        c.enableScissor(cx - 2, viewTop, cx + cw + 4, viewBot);
+        int y = viewTop + 2 - winScroll, total = 0;
+        for (Setting<?> st : secs.get(winSec).items()) {
+            int h = control(c, st, cx, y, cw, mx, my);
+            y += h; total += h;
+        }
+        c.disableScissor();
+        winContentH = total + 4;
+        winScroll = Math.max(0, Math.min(Math.max(0, winContentH - (viewBot - viewTop)), winScroll));
+    }
+
+    @SuppressWarnings("unchecked")
+    private int control(DrawContext c, Setting<?> s, int x, int y, int w, int mx, int my) {
+        int h;
         if (s instanceof NumberSetting n) {
+            h = 25;
             String v = String.format(n.step >= 1 ? "%.0f" : "%.2f", n.value);
-            txt(c, textRenderer.trimToWidth(s.name, w - tw(v) - 10), x + 3, y + 2, GRAY);
-            txt(c, v, x + w - tw(v) - 3, y + 2, WHITE);
-            int tx = x + 3, tww = w - 6, ty = y + 14;
-            RenderUtil.roundedRect(c, tx, ty, tww, 4, 2, 0x33FFFFFF);
-            double t = (n.value - n.min) / (n.max - n.min);
-            RenderUtil.roundedRect(c, tx, ty, Math.max(4, (int) (tww * t)), 4, 2, Theme.accent);
-            sliders.add(new Slider(tx, ty, tww, n));
-            return 22;
-        }
-        if (s instanceof ModeSetting ms) {
-            txt(c, label, x + 3, y + 3, GRAY);
-            String v = textRenderer.trimToWidth(ms.value, w / 2);
-            txt(c, v, x + w - tw(v) - 3, y + 3, WHITE);
-            hit(x, y, w, 15, ms::next, ms::prev);
-            return 16;
-        }
-        if (s instanceof StringSetting ss) {
+            txt(c, textRenderer.trimToWidth(s.name, w - tw(v) - 10), x, y + 3, GRAY);
+            txt(c, v, x + w - tw(v), y + 3, WHITE);
+            int ty = y + 15;
+            RenderUtil.roundedRect(c, x, ty, w, 4, 2, 0x33FFFFFF);
+            double t = n.max > n.min ? (n.value - n.min) / (n.max - n.min) : 0;
+            RenderUtil.roundedRect(c, x, ty, Math.max(4, (int) (w * t)), 4, 2, Theme.accent);
+            if (ty >= viewTop && ty + 4 <= viewBot) sliders.add(new Slider(x, ty, w, n));
+        } else if (s instanceof ModeSetting ms && isColor(ms)) {
+            h = 19;
+            txt(c, textRenderer.trimToWidth(s.name, w - Colors.NAMES.length * 13 - 6), x, y + 5, GRAY);
+            int sx = x + w - Colors.NAMES.length * 13;
+            for (int i = 0; i < Colors.NAMES.length; i++) {
+                String nm = Colors.NAMES[i];
+                if (nm.equals(ms.value)) RenderUtil.roundedRect(c, sx + i * 13 - 1, y + 3, 12, 12, 3, WHITE);
+                RenderUtil.roundedRect(c, sx + i * 13, y + 4, 10, 10, 3, Colors.of(nm));
+                chit(sx + i * 13, y + 3, 12, 12, () -> ms.value = nm, null);
+            }
+        } else if (s instanceof ModeSetting ms) {
+            int lw = w * 4 / 10;
+            txt(c, textRenderer.trimToWidth(s.name, lw - 6), x, y + 5, GRAY);
+            int cx0 = x + lw, cx = cx0, cy = y + 2, lines = 1;
+            for (String o : ms.modes) {
+                int chw = tw(o) + 10;
+                if (cx + chw > x + w && cx > cx0) { cx = cx0; cy += 15; lines++; }
+                boolean sel = o.equals(ms.value);
+                RenderUtil.roundedRect(c, cx, cy, chw, 13, 3, sel ? Theme.accent : 0x22FFFFFF);
+                txt(c, o, cx + 5, cy + 3, sel ? WHITE : GRAY);
+                chit(cx, cy, chw, 13, () -> ms.value = o, () -> ms.value = o);
+                cx += chw + 3;
+            }
+            h = Math.max(19, lines * 15 + 4);
+        } else if (s instanceof StringSetting ss) {
+            h = 19;
+            int lw = w * 4 / 10, fx = x + lw, fw = w - lw;
+            txt(c, textRenderer.trimToWidth(s.name, lw - 6), x, y + 5, GRAY);
             boolean ed = editing == ss;
-            txt(c, textRenderer.trimToWidth(s.name, w / 2 - 6), x + 3, y + 3, GRAY);
+            RenderUtil.roundedRect(c, fx, y + 2, fw, 14, 3, ed ? 0x44FFFFFF : 0x22FFFFFF);
             String v = ed ? ss.value + ((System.currentTimeMillis() / 500) % 2 == 0 ? "_" : "") : (ss.value.isEmpty() ? "(click)" : ss.value);
-            String shown = textRenderer.trimToWidth(v, w / 2 + 8, ed);
-            txt(c, shown, x + w - tw(shown) - 3, y + 3, ed ? WHITE : (ss.value.isEmpty() ? DIM : 0xFF9CA3AF));
-            hit(x, y, w, 15, () -> { editing = ss; editBox.t = ss.value; focus = editBox; }, null);
-            return 16;
+            txt(c, textRenderer.trimToWidth(v, fw - 8, ed), fx + 4, y + 5, ed ? WHITE : (ss.value.isEmpty() ? DIM : 0xFF9CA3AF));
+            chit(fx, y + 2, fw, 14, () -> { editing = ss; editBox.t = ss.value; focus = editBox; }, null);
+        } else if (s.value instanceof Boolean b) {
+            h = 19;
+            txt(c, textRenderer.trimToWidth(s.name, w - 34), x, y + 5, GRAY);
+            int sx = x + w - 24;
+            RenderUtil.roundedRect(c, sx, y + 4, 22, 10, 5, b ? Theme.accent : 0x33FFFFFF);
+            RenderUtil.roundedRect(c, b ? sx + 13 : sx + 1, y + 5, 8, 8, 4, WHITE);
+            chit(x, y, w, 18, () -> ((Setting<Boolean>) s).value = !b, null);
+        } else {
+            return 0;
         }
-        if (s.value instanceof Boolean b) {
-            txt(c, label, x + 3, y + 3, GRAY);
-            RenderUtil.roundedRect(c, x + w - 24, y + 2, 21, 11, 3, b ? Theme.accent : 0x33FFFFFF);
-            String t = b ? "ON" : "OFF";
-            txt(c, t, x + w - 24 + (21 - tw(t)) / 2, y + 4, WHITE);
-            hit(x, y, w, 15, () -> ((Setting<Boolean>) s).value = !b, null);
-            return 16;
-        }
-        return 0;
+        c.fill(x, y + h - 1, x + w, y + h, 0x14FFFFFF);
+        return h;
     }
 
     private void syncEdit() { if (focus == editBox && editing != null) editing.value = editBox.t; }
@@ -282,7 +386,11 @@ public class ClickGuiScreen extends Screen {
             simpleRow(c, x + 6, ry, w - 12, key, Hud.toggles.get(key), mx, my, () -> Hud.toggles.compute(key, (k, v) -> !v));
             ry += 17;
         }
-        for (HudModule m : hm) { simpleRow(c, x + 6, ry, w - 12, m.name, m.isEnabled(), mx, my, m::toggle); ry += 17; }
+        for (HudModule m : hm) {
+            simpleRow(c, x + 6, ry, w - 12, m.name, m.isEnabled(), mx, my, m::toggle);
+            hit(x + 6, ry, w - 12, 15, null, () -> openWin(m));
+            ry += 17;
+        }
         txt(c, "Trage elementele de pe ecran ca sa le muti", x + 6, ry + 3, DIM);
         for (HudModule m : hm) {
             if (!m.isEnabled()) continue;
@@ -436,6 +544,10 @@ public class ClickGuiScreen extends Screen {
                 }
             }
         }
+        if (winMod != null) {
+            if (!in(mx, my, wx, wy, ww, wh)) { winMod = null; binding = null; }
+            return true;
+        }
         return super.mouseClicked(click, doubled);
     }
 
@@ -455,6 +567,7 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double hAmount, double vAmount) {
+        if (winMod != null) { winScroll = Math.max(0, winScroll - (int) (vAmount * 14)); return true; }
         if (tab == 0) scroll = Math.max(0, Math.min(Math.max(0, contentH - (height - 44)), scroll - (int) (vAmount * 20)));
         return true;
     }
@@ -490,6 +603,7 @@ public class ClickGuiScreen extends Screen {
             }
             return true;
         }
+        if (winMod != null && key == GLFW.GLFW_KEY_ESCAPE) { winMod = null; return true; }
         if (key == GLFW.GLFW_KEY_RIGHT_SHIFT) { close(); return true; }
         return super.keyPressed(input);
     }
