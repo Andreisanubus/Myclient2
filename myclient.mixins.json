@@ -5,7 +5,8 @@
   "package": "dev.myclient.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "LivingEntityAccessor"
+    "LivingEntityAccessor",
+    "ClientWorldBlockUpdateMixin"
   ],
   "injectors": {
     "defaultRequire": 1
