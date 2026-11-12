@@ -1,16 +1,9 @@
 
 package dev.myclient.chunkfinder;
 
-import dev.myclient.render.Proj;
-
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
-
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
 
 public final class BlockClusterRenderer {
 
@@ -19,47 +12,31 @@ public final class BlockClusterRenderer {
 
     public static void render(
             DrawContext context,
-            Collection<BlockPos> positions,
+            BlockLayer.Geometry geometry,
             int fillColor,
             int outlineColor,
             boolean showFill,
             boolean showOutline
     ) {
-        if (context == null || positions == null || positions.isEmpty()) {
+        if (context == null || geometry == null) {
             return;
         }
 
-        Set<BlockPos> membership = new HashSet<>();
+        BlockClusterGeometry.Mesh mesh = geometry.mesh();
 
-        for (BlockPos pos : positions) {
-            if (pos != null) {
-                membership.add(pos.toImmutable());
-            }
-        }
-
-        if (membership.isEmpty()) {
+        if (mesh == null) {
             return;
         }
-
-        BlockClusterGeometry.Mesh mesh =
-                BlockClusterGeometry.build(
-                        membership,
-                        membership::contains
-                );
 
         if (showFill) {
             for (BlockClusterGeometry.Face face : mesh.faces()) {
-                Proj.fillPoly(
-                        context,
-                        faceVertices(face),
-                        fillColor
-                );
+                ProjFill(context, face, fillColor);
             }
         }
 
         if (showOutline) {
             for (BlockClusterGeometry.Segment edge : mesh.edges()) {
-                Proj.line3(
+                dev.myclient.render.Proj.line3(
                         context,
                         edge.start(),
                         edge.end(),
@@ -69,8 +46,10 @@ public final class BlockClusterRenderer {
         }
     }
 
-    private static Vec3d[] faceVertices(
-            BlockClusterGeometry.Face face
+    private static void ProjFill(
+            DrawContext context,
+            BlockClusterGeometry.Face face,
+            int color
     ) {
         BlockPos pos = face.pos();
 
@@ -78,7 +57,7 @@ public final class BlockClusterRenderer {
         double y = pos.getY();
         double z = pos.getZ();
 
-        return switch (face.side()) {
+        Vec3d[] vertices = switch (face.side()) {
             case DOWN -> new Vec3d[] {
                     new Vec3d(x, y, z),
                     new Vec3d(x, y, z + 1),
@@ -121,5 +100,11 @@ public final class BlockClusterRenderer {
                     new Vec3d(x + 1, y + 1, z)
             };
         };
+
+        dev.myclient.render.Proj.fillPoly(
+                context,
+                vertices,
+                color
+        );
     }
 }
