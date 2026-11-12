@@ -6,7 +6,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
 import java.util.*;
-
 import java.util.function.LongPredicate;
 
 public final class BlockLayer {
@@ -18,6 +17,17 @@ public final class BlockLayer {
     private final Map<RegistryKey<World>,
             EnumMap<SuspectObjects.Category, Geometry>> geometryCache =
             new HashMap<>();
+
+    private final Map<RegistryKey<World>,
+            Map<GeometryKey, Geometry>> filteredGeometryCache =
+            new HashMap<>();
+
+    private record GeometryKey(
+            SuspectObjects.Category category,
+            int excludedChunkX,
+            int excludedChunkZ
+    ) {
+    }
 
     public record Geometry(
             List<BlockPos> positions,
@@ -95,17 +105,20 @@ public final class BlockLayer {
         if (layers.isEmpty()) {
             dimensions.remove(dimension);
             geometryCache.remove(dimension);
+            filteredGeometryCache.remove(dimension);
         }
     }
 
     public void clear(RegistryKey<World> dimension) {
         dimensions.remove(dimension);
         geometryCache.remove(dimension);
+        filteredGeometryCache.remove(dimension);
     }
 
     public void clear() {
         dimensions.clear();
         geometryCache.clear();
+        filteredGeometryCache.clear();
     }
 
     public void retainChunk(
@@ -151,6 +164,7 @@ public final class BlockLayer {
         if (layers.isEmpty()) {
             dimensions.remove(dimension);
             geometryCache.remove(dimension);
+            filteredGeometryCache.remove(dimension);
         }
     }
 
@@ -194,12 +208,62 @@ public final class BlockLayer {
             return cached;
         }
 
-        List<BlockPos> positions = positions(dimension, category);
+        Geometry result = buildGeometry(
+                positions(dimension, category)
+        );
 
+        cache.put(category, result);
+        return result;
+    }
+
+    public Geometry geometry(
+            RegistryKey<World> dimension,
+            SuspectObjects.Category category,
+            int excludedChunkX,
+            int excludedChunkZ
+    ) {
+        if (dimension == null || category == null) {
+            return emptyGeometry();
+        }
+
+        GeometryKey key = new GeometryKey(
+                category,
+                excludedChunkX,
+                excludedChunkZ
+        );
+
+        Map<GeometryKey, Geometry> cache =
+                filteredGeometryCache.computeIfAbsent(
+                        dimension,
+                        ignored -> new HashMap<>()
+                );
+
+        Geometry cached = cache.get(key);
+
+        if (cached != null) {
+            return cached;
+        }
+
+        List<BlockPos> filteredPositions = new ArrayList<>();
+
+        for (BlockPos pos : positions(dimension, category)) {
+            if ((pos.getX() >> 4) == excludedChunkX
+                    && (pos.getZ() >> 4) == excludedChunkZ) {
+                continue;
+            }
+
+            filteredPositions.add(pos);
+        }
+
+        Geometry result = buildGeometry(filteredPositions);
+
+        cache.put(key, result);
+        return result;
+    }
+
+    private static Geometry buildGeometry(List<BlockPos> positions) {
         if (positions.isEmpty()) {
-            Geometry empty = emptyGeometry();
-            cache.put(category, empty);
-            return empty;
+            return emptyGeometry();
         }
 
         Set<BlockPos> membership = new HashSet<>(positions);
@@ -213,14 +277,7 @@ public final class BlockLayer {
                         membership::contains
                 );
 
-        Geometry result = new Geometry(
-                positions,
-                components,
-                mesh
-        );
-
-        cache.put(category, result);
-        return result;
+        return new Geometry(positions, components, mesh);
     }
 
     public Set<SuspectObjects.Category> categories(
@@ -280,16 +337,27 @@ public final class BlockLayer {
         EnumMap<SuspectObjects.Category, Geometry> cache =
                 geometryCache.get(dimension);
 
-        if (cache == null) {
-            return;
+        if (cache != null) {
+            for (SuspectObjects.Category category : categories) {
+                cache.remove(category);
+            }
+
+            if (cache.isEmpty()) {
+                geometryCache.remove(dimension);
+            }
         }
 
-        for (SuspectObjects.Category category : categories) {
-            cache.remove(category);
-        }
+        Map<GeometryKey, Geometry> filteredCache =
+                filteredGeometryCache.get(dimension);
 
-        if (cache.isEmpty()) {
-            geometryCache.remove(dimension);
+        if (filteredCache != null) {
+            filteredCache.keySet().removeIf(
+                    key -> categories.contains(key.category())
+            );
+
+            if (filteredCache.isEmpty()) {
+                filteredGeometryCache.remove(dimension);
+            }
         }
     }
 
