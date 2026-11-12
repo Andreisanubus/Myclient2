@@ -1,6 +1,7 @@
 
 package dev.myclient.module.modules;
 
+import dev.myclient.chunkfinder.BlockClusterGlow;
 import dev.myclient.chunkfinder.BlockClusterRenderer;
 import dev.myclient.chunkfinder.BlockLayer;
 import dev.myclient.chunkfinder.BlockLayerConsumer;
@@ -194,6 +195,9 @@ public final class ChunkFinderModule extends Module {
         double playerX = mc.player.getX();
         double playerY = mc.player.getY();
         double playerZ = mc.player.getZ();
+
+        // Resetăm bugetul o singură dată pentru întregul frame.
+        BlockClusterGlow.beginFrame();
 
         for (SuspectObjects.Category category
                 : SuspectObjects.Category.values()) {
