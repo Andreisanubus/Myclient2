@@ -32,20 +32,10 @@ public final class BlockClusterGeometry {
         }
     }
 
-    private record EdgeKey(
-            int axis,
-            int fixedA,
-            int fixedB,
-            int start,
-            int end
-    ) {
+    private record EdgeLine(int axis, int a, int b) {
     }
 
-    private record EdgeLine(
-            int axis,
-            int fixedA,
-            int fixedB
-    ) {
+    private record UnitEdge(EdgeLine line, int start) {
     }
 
     public static Mesh build(
@@ -57,30 +47,28 @@ public final class BlockClusterGeometry {
         }
 
         List<Face> faces = new ArrayList<>();
-        Map<EdgeLine, List<Integer>> edgeLines = new HashMap<>();
+        Set<UnitEdge> edges = new HashSet<>();
 
         for (BlockPos original : positions) {
             BlockPos pos = original.toImmutable();
 
-            for (Direction direction : DIRECTIONS) {
-                BlockPos neighbor = pos.offset(direction);
-
-                if (membership.contains(neighbor)) {
+            for (Direction side : DIRECTIONS) {
+                if (membership.contains(pos.offset(side))) {
                     continue;
                 }
 
-                faces.add(new Face(pos, direction));
-                addFaceEdges(pos, direction, edgeLines);
+                faces.add(new Face(pos, side));
+                addFaceEdges(pos, side, edges);
             }
         }
 
-        return new Mesh(faces, mergeCollinear(edgeLines));
+        return new Mesh(faces, mergeEdges(edges));
     }
 
     private static void addFaceEdges(
             BlockPos pos,
             Direction side,
-            Map<EdgeLine, List<Integer>> lines
+            Set<UnitEdge> edges
     ) {
         int x = pos.getX();
         int y = pos.getY();
@@ -88,94 +76,91 @@ public final class BlockClusterGeometry {
 
         switch (side) {
             case DOWN -> {
-                addEdge(lines, 0, y, z, x, x + 1);
-                addEdge(lines, 0, y, z + 1, x, x + 1);
-                addEdge(lines, 2, y, x, z, z + 1);
-                addEdge(lines, 2, y, x + 1, z, z + 1);
+                addEdge(edges, 0, y, z, x);
+                addEdge(edges, 0, y, z + 1, x);
+                addEdge(edges, 2, x, y, z);
+                addEdge(edges, 2, x + 1, y, z);
             }
             case UP -> {
-                addEdge(lines, 0, y + 1, z, x, x + 1);
-                addEdge(lines, 0, y + 1, z + 1, x, x + 1);
-                addEdge(lines, 2, y + 1, x, z, z + 1);
-                addEdge(lines, 2, y + 1, x + 1, z, z + 1);
+                addEdge(edges, 0, y + 1, z, x);
+                addEdge(edges, 0, y + 1, z + 1, x);
+                addEdge(edges, 2, x, y + 1, z);
+                addEdge(edges, 2, x + 1, y + 1, z);
             }
             case NORTH -> {
-                addEdge(lines, 0, z, y, x, x + 1);
-                addEdge(lines, 0, z, y + 1, x, x + 1);
-                addEdge(lines, 1, z, x, y, y + 1);
-                addEdge(lines, 1, z, x + 1, y, y + 1);
+                addEdge(edges, 0, y, z, x);
+                addEdge(edges, 0, y + 1, z, x);
+                addEdge(edges, 1, x, z, y);
+                addEdge(edges, 1, x + 1, z, y);
             }
             case SOUTH -> {
-                addEdge(lines, 0, z + 1, y, x, x + 1);
-                addEdge(lines, 0, z + 1, y + 1, x, x + 1);
-                addEdge(lines, 1, z + 1, x, y, y + 1);
-                addEdge(lines, 1, z + 1, x + 1, y, y + 1);
+                addEdge(edges, 0, y, z + 1, x);
+                addEdge(edges, 0, y + 1, z + 1, x);
+                addEdge(edges, 1, x, z + 1, y);
+                addEdge(edges, 1, x + 1, z + 1, y);
             }
             case WEST -> {
-                addEdge(lines, 2, x, y, z, z + 1);
-                addEdge(lines, 2, x, y + 1, z, z + 1);
-                addEdge(lines, 1, x, z, y, y + 1);
-                addEdge(lines, 1, x, z + 1, y, y + 1);
+                addEdge(edges, 1, x, z, y);
+                addEdge(edges, 1, x, z + 1, y);
+                addEdge(edges, 2, x, y, z);
+                addEdge(edges, 2, x, y + 1, z);
             }
             case EAST -> {
-                addEdge(lines, 2, x + 1, y, z, z + 1);
-                addEdge(lines, 2, x + 1, y + 1, z, z + 1);
-                addEdge(lines, 1, x + 1, z, y, y + 1);
-                addEdge(lines, 1, x + 1, z + 1, y, y + 1);
+                addEdge(edges, 1, x + 1, z, y);
+                addEdge(edges, 1, x + 1, z + 1, y);
+                addEdge(edges, 2, x + 1, y, z);
+                addEdge(edges, 2, x + 1, y + 1, z);
             }
         }
     }
 
     private static void addEdge(
-            Map<EdgeLine, List<Integer>> lines,
+            Set<UnitEdge> edges,
             int axis,
-            int fixedA,
-            int fixedB,
-            int start,
-            int end
+            int a,
+            int b,
+            int start
     ) {
-        EdgeLine key = new EdgeLine(axis, fixedA, fixedB);
-        List<Integer> intervals = lines.computeIfAbsent(
-                key,
-                ignored -> new ArrayList<>()
-        );
-
-        intervals.add(start);
-        intervals.add(end);
+        edges.add(new UnitEdge(new EdgeLine(axis, a, b), start));
     }
 
-    private static List<Segment> mergeCollinear(
-            Map<EdgeLine, List<Integer>> lines
-    ) {
+    private static List<Segment> mergeEdges(Set<UnitEdge> edges) {
+        Map<EdgeLine, TreeSet<Integer>> lines = new HashMap<>();
+
+        for (UnitEdge edge : edges) {
+            lines.computeIfAbsent(
+                    edge.line(),
+                    ignored -> new TreeSet<>()
+            ).add(edge.start());
+        }
+
         List<Segment> result = new ArrayList<>();
 
-        for (Map.Entry<EdgeLine, List<Integer>> entry : lines.entrySet()) {
+        for (Map.Entry<EdgeLine, TreeSet<Integer>> entry : lines.entrySet()) {
             EdgeLine line = entry.getKey();
-            List<Integer> values = entry.getValue();
+            Iterator<Integer> iterator = entry.getValue().iterator();
 
-            values.sort(Integer::compareTo);
-
-            if (values.size() < 2) {
+            if (!iterator.hasNext()) {
                 continue;
             }
 
-            int start = values.get(0);
-            int end = values.get(1);
+            int start = iterator.next();
+            int previous = start;
 
-            for (int i = 2; i + 1 < values.size(); i += 2) {
-                int nextStart = values.get(i);
-                int nextEnd = values.get(i + 1);
+            while (iterator.hasNext()) {
+                int current = iterator.next();
 
-                if (nextStart <= end) {
-                    end = Math.max(end, nextEnd);
-                } else {
-                    result.add(createSegment(line, start, end));
-                    start = nextStart;
-                    end = nextEnd;
+                if (current == previous + 1) {
+                    previous = current;
+                    continue;
                 }
+
+                result.add(createSegment(line, start, previous + 1));
+                start = current;
+                previous = current;
             }
 
-            result.add(createSegment(line, start, end));
+            result.add(createSegment(line, start, previous + 1));
         }
 
         return result;
@@ -188,20 +173,18 @@ public final class BlockClusterGeometry {
     ) {
         return switch (line.axis()) {
             case 0 -> new Segment(
-                    new Vec3d(start, line.fixedA(), line.fixedB()),
-                    new Vec3d(end, line.fixedA(), line.fixedB())
+                    new Vec3d(start, line.a(), line.b()),
+                    new Vec3d(end, line.a(), line.b())
             );
             case 1 -> new Segment(
-                    new Vec3d(line.fixedA(), start, line.fixedB()),
-                    new Vec3d(line.fixedA(), end, line.fixedB())
+                    new Vec3d(line.a(), start, line.b()),
+                    new Vec3d(line.a(), end, line.b())
             );
             case 2 -> new Segment(
-                    new Vec3d(line.fixedB(), line.fixedA(), start),
-                    new Vec3d(line.fixedB(), line.fixedA(), end)
+                    new Vec3d(line.a(), line.b(), start),
+                    new Vec3d(line.a(), line.b(), end)
             );
-            default -> throw new IllegalArgumentException(
-                    "Unknown edge axis: " + line.axis()
-            );
+            default -> throw new IllegalArgumentException("Invalid axis");
         };
     }
 
