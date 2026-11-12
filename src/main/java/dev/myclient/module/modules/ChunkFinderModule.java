@@ -1,11 +1,7 @@
 
 package dev.myclient.module.modules;
 
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
-
-import dev.myclient.chunkfinder.BlockBoxHelper;
+import dev.myclient.chunkfinder.BlockClusterRenderer;
 import dev.myclient.chunkfinder.BlockLayer;
 import dev.myclient.chunkfinder.BlockLayerConsumer;
 import dev.myclient.chunkfinder.ChunkScanner;
@@ -21,26 +17,30 @@ import dev.myclient.util.Colors;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
 import net.minecraft.world.World;
+
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 public final class ChunkFinderModule extends Module {
 
     private final BlockLayer layer = new BlockLayer();
+
     private final BlockLayerConsumer consumer =
             new BlockLayerConsumer(layer);
 
     private final NumberSetting renderDistance =
-            num("Render Distance", 64, 16, 256, 16);
-
-    private final NumberSetting boxSize =
-            num("Box Size", 1.0, 0.1, 2.0, 0.1);
+            num("Render Distance", 128, 16, 256, 16);
 
     private final Setting<Boolean> showFill =
             bool("Show Fill", true);
 
     private final Setting<Boolean> showOutline =
             bool("Show Outline", true);
+
+    private final Setting<Boolean> distanceFade =
+            bool("Distance Fade", true);
 
     private final Map<SuspectObjects.Category, DetectionSettings>
             detectionSettings =
@@ -70,9 +70,9 @@ public final class ChunkFinderModule extends Module {
 
         header("General");
         add(renderDistance);
-        add(boxSize);
         add(showFill);
         add(showOutline);
+        add(distanceFade);
 
         for (SuspectObjects.Category category
                 : SuspectObjects.Category.values()) {
@@ -163,16 +163,6 @@ public final class ChunkFinderModule extends Module {
     }
 
     @Override
-    public void onTick() {
-        if (mc.player == null || mc.world == null) {
-            return;
-        }
-
-        // The scanner processes loaded chunks incrementally.
-        // No synchronous chunk scanning is performed here.
-    }
-
-    @Override
     public void onRender(
             DrawContext context,
             int width,
@@ -182,7 +172,8 @@ public final class ChunkFinderModule extends Module {
             return;
         }
 
-        RegistryKey<World> dimension = mc.world.getRegistryKey();
+        RegistryKey<World> dimension =
+                mc.world.getRegistryKey();
 
         double maxDistance = renderDistance.get();
         double maxDistanceSquared = maxDistance * maxDistance;
@@ -190,9 +181,6 @@ public final class ChunkFinderModule extends Module {
         double playerX = mc.player.getX();
         double playerY = mc.player.getY();
         double playerZ = mc.player.getZ();
-
-        int currentChunkX = mc.player.getChunkPos().x;
-        int currentChunkZ = mc.player.getChunkPos().z;
 
         for (SuspectObjects.Category category
                 : SuspectObjects.Category.values()) {
@@ -204,62 +192,89 @@ public final class ChunkFinderModule extends Module {
                 continue;
             }
 
-            List<BlockPos> positions =
-                    layer.positions(dimension, category);
+            BlockLayer.Geometry geometry =
+                    layer.geometry(dimension, category);
+
+            List<BlockPos> positions = geometry.positions();
 
             if (positions.isEmpty()) {
                 continue;
             }
 
+            double nearestDistanceSquared =
+                    nearestDistanceSquared(
+                            positions,
+                            playerX,
+                            playerY,
+                            playerZ
+                    );
+
+            if (nearestDistanceSquared > maxDistanceSquared) {
+                continue;
+            }
+
+            double distance = Math.sqrt(nearestDistanceSquared);
+
+            double fade = 1.0;
+
+            if (distanceFade.value) {
+                double fadeStart = maxDistance * 0.70;
+
+                if (distance > fadeStart) {
+                    fade = 1.0 - (
+                            (distance - fadeStart)
+                                    / Math.max(1.0, maxDistance - fadeStart)
+                    );
+
+                    fade = Math.max(0.0, Math.min(1.0, fade));
+                }
+            }
+
             int color = Colors.of(settings.color.value);
 
             int opacity = (int) Math.round(
-                    settings.opacity.get() * 255.0 / 100.0
+                    settings.opacity.get() * 255.0 / 100.0 * fade
             );
 
             int fillColor = Proj.alpha(color, opacity);
-            int outlineColor = Proj.alpha(color, 235);
+            int outlineColor = Proj.alpha(
+                    color,
+                    (int) Math.round(235.0 * fade)
+            );
 
-            for (BlockPos pos : positions) {
+            BlockClusterRenderer.render(
+                    context,
+                    geometry,
+                    fillColor,
+                    outlineColor,
+                    showFill.value && opacity > 0,
+                    showOutline.value && settings.outline.value
+            );
+        }
+    }
 
-                // Never display blocks from the player's current chunk.
-                if ((pos.getX() >> 4) == currentChunkX
-                        && (pos.getZ() >> 4) == currentChunkZ) {
-                    continue;
-                }
+    private static double nearestDistanceSquared(
+            List<BlockPos> positions,
+            double playerX,
+            double playerY,
+            double playerZ
+    ) {
+        double nearest = Double.MAX_VALUE;
 
-                double dx = pos.getX() + 0.5 - playerX;
-                double dy = pos.getY() + 0.5 - playerY;
-                double dz = pos.getZ() + 0.5 - playerZ;
+        for (BlockPos pos : positions) {
+            double dx = pos.getX() + 0.5 - playerX;
+            double dy = pos.getY() + 0.5 - playerY;
+            double dz = pos.getZ() + 0.5 - playerZ;
 
-                if (dx * dx + dy * dy + dz * dz
-                        > maxDistanceSquared) {
-                    continue;
-                }
+            double distanceSquared =
+                    dx * dx + dy * dy + dz * dz;
 
-                Box box = BlockBoxHelper.scaledBlockBox(
-                        pos,
-                        (float) boxSize.get()
-                );
-
-                if (showFill.value && opacity > 0) {
-                    Proj.fillBox3D(
-                            context,
-                            box,
-                            fillColor,
-                            opacity
-                    );
-                }
-
-                if (showOutline.value && settings.outline.value) {
-                    Proj.boxEdges(
-                            context,
-                            box,
-                            outlineColor
-                    );
-                }
+            if (distanceSquared < nearest) {
+                nearest = distanceSquared;
             }
         }
+
+        return nearest;
     }
 
     public BlockLayer getLayer() {
