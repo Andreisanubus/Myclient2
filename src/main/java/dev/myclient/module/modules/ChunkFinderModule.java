@@ -14,6 +14,7 @@ import dev.myclient.module.Setting;
 import dev.myclient.render.Proj;
 import dev.myclient.util.Colors;
 
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
