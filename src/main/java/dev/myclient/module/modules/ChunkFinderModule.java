@@ -83,17 +83,29 @@ public final class ChunkFinderModule extends Module {
         final ModeSetting color;
         final NumberSetting opacity;
         final Setting<Boolean> outline;
+        final Setting<Boolean> fill;
+        final Setting<Boolean> glow;
+        final Setting<Boolean> tracers;
+        final NumberSetting range;
 
         DetectionSettings(
                 Setting<Boolean> enabled,
                 ModeSetting color,
                 NumberSetting opacity,
-                Setting<Boolean> outline
+                Setting<Boolean> outline,
+                Setting<Boolean> fill,
+                Setting<Boolean> glow,
+                Setting<Boolean> tracers,
+                NumberSetting range
         ) {
             this.enabled = enabled;
             this.color = color;
             this.opacity = opacity;
             this.outline = outline;
+            this.fill = fill;
+            this.glow = glow;
+            this.tracers = tracers;
+            this.range = range;
         }
     }
 
@@ -150,13 +162,29 @@ public final class ChunkFinderModule extends Module {
         Setting<Boolean> outline =
                 bool(prefix + "Outline", true);
 
+        Setting<Boolean> fill =
+                bool(prefix + "Fill", true);
+
+        Setting<Boolean> glow =
+                bool(prefix + "Glow", true);
+
+        Setting<Boolean> tracers =
+                bool(prefix + "Tracers", false);
+
+        NumberSetting range =
+                num(prefix + "Range", 512, 16, 2048, 16);
+
         detectionSettings.put(
                 category,
                 new DetectionSettings(
                         enabled,
                         color,
                         opacity,
-                        outline
+                        outline,
+                        fill,
+                        glow,
+                        tracers,
+                        range
                 )
         );
 
@@ -164,6 +192,10 @@ public final class ChunkFinderModule extends Module {
         add(color);
         add(opacity);
         add(outline);
+        add(fill);
+        add(glow);
+        add(tracers);
+        add(range);
     }
 
     private static String closestColor(int color) {
@@ -304,12 +336,12 @@ public final class ChunkFinderModule extends Module {
                     geometry,
                     fillColor,
                     outlineColor,
-                    showFill.value && fillOpacity > 0,
+                    showFill.value && settings.fill.value && fillOpacity > 0,
                     showOutline.value && settings.outline.value
                             && outlineOpacity > 0,
-                    showGlow.value,
+                    showGlow.value && settings.glow.value,
                     glowIntensity.get() * visibility,
-                    showTracers.value,
+                    showTracers.value && settings.tracers.value,
                     boxSize.get(),
                     (int) Math.round(lineWidth.get()),
                     (int) Math.round(tracerWidth.get()),
