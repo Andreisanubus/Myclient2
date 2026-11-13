@@ -9,6 +9,7 @@ import dev.myclient.module.Setting;
 
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.SpawnReason;
 import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
@@ -102,7 +103,7 @@ public final class Freecam extends Module {
             return;
         }
 
-        Entity detachedCamera = EntityType.MARKER.create(mc.world);
+        Entity detachedCamera = EntityType.MARKER.create(mc.world, SpawnReason.COMMAND);
         if (detachedCamera == null) {
             warn("Nu am putut crea camera client-side.");
             setEnabled(false);
