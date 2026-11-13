@@ -1,6 +1,7 @@
 package dev.myclient.mixin;
 
-import dev.myclient.module.modules.SoundDetectorModule;
+import dev.myclient.module.modules.SoundDetector;
+import net.minecraft.util.Identifier;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,12 +13,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ClientPlayNetworkHandlerSoundMixin {
     @Inject(method = "onPlaySound", at = @At("TAIL"))
     private void myclient$onSound(PlaySoundS2CPacket packet, CallbackInfo ci) {
-        SoundDetectorModule.soundPlayed(
-                packet.getSound(),
-                packet.getX(),
-                packet.getY(),
-                packet.getZ(),
-                packet.getVolume()
-        );
+        Identifier id = packet.getSound().getKey()
+                .map(key -> key.getValue())
+                .orElse(Identifier.of("minecraft", "unknown"));
+        SoundDetector.soundPlayed(id, packet.getX(), packet.getY(), packet.getZ());
     }
 }
