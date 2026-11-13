@@ -48,6 +48,14 @@ public final class HiveChunkFinderModule extends Module {
 
     private final NumberSetting mergeRadius =
             num("Merge Radius", 4, 1, 8, 1);
+    private final NumberSetting scanRadius =
+            num("Scan Radius", 12, 2, 32, 1);
+    private final NumberSetting minimumHoney =
+            num("Minimum Honey Level", 5, 1, 5, 1);
+    private final Setting<Boolean> detectNests =
+            bool("Detect Bee Nests", true);
+    private final Setting<Boolean> detectHives =
+            bool("Detect Beehives", true);
     private final Setting<Boolean> notifications =
             bool("Notifications", true);
     private final Setting<Boolean> beam =
@@ -77,6 +85,10 @@ public final class HiveChunkFinderModule extends Module {
         super("Chunk Finder", Category.BASE_RAID);
         header("Detection");
         add(mergeRadius);
+        add(scanRadius);
+        add(detectNests);
+        add(detectHives);
+        add(minimumHoney);
         add(notifications);
         header("Marker");
         add(markerColor);
@@ -135,7 +147,10 @@ public final class HiveChunkFinderModule extends Module {
         tick++;
         int playerChunkX = mc.player.getChunkPos().x;
         int playerChunkZ = mc.player.getChunkPos().z;
-        int viewDistance = Math.max(2, mc.options.getViewDistance().getValue());
+        int viewDistance = Math.max(2, Math.min(
+                scanRadius.asInt(),
+                mc.options.getViewDistance().getValue()
+        ));
 
         if (playerChunkX != centerChunkX || playerChunkZ != centerChunkZ
                 || viewDistance != activeViewDistance) {
@@ -166,7 +181,7 @@ public final class HiveChunkFinderModule extends Module {
             if (chunk == null) continue;
 
             checked.add(key);
-            if (hasFullHoneyHive(chunk)) {
+            if (hasSelectedHoneyHive(chunk)) {
                 hits.put(key, new HitChunk(chunkX, chunkZ, System.nanoTime()));
                 changed = true;
                 if (notifications.value) {
@@ -213,7 +228,8 @@ public final class HiveChunkFinderModule extends Module {
         if (removed) rebuildClusters();
     }
 
-    private static boolean hasFullHoneyHive(WorldChunk chunk) {
+    private boolean hasSelectedHoneyHive(WorldChunk chunk) {
+        if (!detectNests.value && !detectHives.value) return false;
         for (ChunkSection section : chunk.getSectionArray()) {
             if (section == null || section.isEmpty()) continue;
 
@@ -221,8 +237,11 @@ public final class HiveChunkFinderModule extends Module {
                 for (int z = 0; z < 16; z++) {
                     for (int x = 0; x < 16; x++) {
                         BlockState state = section.getBlockState(x, y, z);
-                        if ((state.isOf(Blocks.BEE_NEST) || state.isOf(Blocks.BEEHIVE))
-                                && state.get(BeehiveBlock.HONEY_LEVEL) == 5) {
+                        boolean selectedType =
+                                (detectNests.value && state.isOf(Blocks.BEE_NEST))
+                                || (detectHives.value && state.isOf(Blocks.BEEHIVE));
+                        if (selectedType
+                                && state.get(BeehiveBlock.HONEY_LEVEL) >= minimumHoney.asInt()) {
                             return true;
                         }
                     }
