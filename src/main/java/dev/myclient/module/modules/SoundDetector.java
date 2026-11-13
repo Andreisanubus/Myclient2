@@ -32,7 +32,7 @@ public final class SoundDetector extends Module {
     }
 
     private void add(Identifier id, Vec3d pos) {
-        if (mc.player == null || mc.player.getPos().squaredDistanceTo(pos) > range.get() * range.get()) return;
+        if (mc.player == null || new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()).squaredDistanceTo(pos) > range.get() * range.get()) return;
         String path = id.getPath().replace('_', ' ');
         if (!includeAmbient.value && (path.contains("ambient") || path.contains("weather"))) return;
         ALERTS.addFirst(new SoundAlert(path, pos, System.nanoTime()));
@@ -46,7 +46,7 @@ public final class SoundDetector extends Module {
         int shown = 0;
         for (SoundAlert alert : ALERTS) {
             if ((now - alert.time()) / 1_000_000_000.0 > displayTime.get()) continue;
-            double d = Math.sqrt(mc.player.getPos().squaredDistanceTo(alert.pos()));
+            double d = Math.sqrt(new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()).squaredDistanceTo(alert.pos()));
             String line = "Sound: " + alert.name();
             if (coordinates.value) line += " [" + (int) alert.pos().x + ", " + (int) alert.pos().y + ", " + (int) alert.pos().z + "]";
             if (distance.value) line += " " + Math.round(d) + "m";
