@@ -78,6 +78,41 @@ jobs:
           find build/libs -maxdepth 1 -name "*.jar" -type f
           test -n "$(find build/libs -maxdepth 1 -name '*.jar' -type f)"
 
+      - name: Package Chunk Finder and Block ESP source
+        run: |
+          cat > ChunkFinder-BlockESP-README.txt <<'EOF'
+          MYCLIENT - CHUNK FINDER + BLOCK ESP PATCH
+          
+          Target: Fabric 1.21.11, Java 21.
+          
+          This archive contains the complete chunkfinder package and the two module
+          classes, module registry and world block-update mixin used by this patch.
+          
+          Copy the paths into the matching paths in your repository, replacing
+          existing files when prompted. Do not copy the package directory into the
+          project root; preserve the src/main/java directory structure.
+          
+          The module registry is included because it registers both modules.
+          The mixin is included because it invalidates cached hive checks after
+          a block update.
+          
+          The normal MyClient-JAR artifact is built separately by this workflow.
+          EOF
+          zip -r ChunkFinder-BlockESP.zip \
+            ChunkFinder-BlockESP-README.txt \
+            src/main/java/dev/myclient/chunkfinder \
+            src/main/java/dev/myclient/module/modules/ChunkFinderModule.java \
+            src/main/java/dev/myclient/module/modules/HiveChunkFinderModule.java \
+            src/main/java/dev/myclient/module/Catalog.java \
+            src/main/java/dev/myclient/mixin/ClientWorldBlockUpdateMixin.java
+
+      - name: Upload Chunk Finder and Block ESP source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChunkFinder-BlockESP-SOURCE
+          path: ChunkFinder-BlockESP.zip
+          if-no-files-found: error
+
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
