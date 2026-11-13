@@ -1,6 +1,6 @@
 package dev.myclient.module.modules;
 
-import dev.myclient.mixin.MixinMarker;
+import dev.myclient.mixinmarker.MixinMarker;
 import dev.myclient.module.Category;
 import dev.myclient.module.Module;
 import dev.myclient.module.NumberSetting;
