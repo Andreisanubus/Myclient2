@@ -68,7 +68,7 @@ public final class Catalog {
         st(m, Category.RENDER, "Region Map", "n:Zoom:1:1:5:1", "b:Show Chunks:true");
         m.add(new Freecam());
         m.add(new TickActivityModule());
-        m.add(new SoundDetector());
+        m.add(new SoundDetectorModule());
         m.add(new PerformanceModule());
 
         m.add(BlockSetEsp.xray());
