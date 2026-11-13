@@ -32,6 +32,11 @@ import net.minecraft.util.math.Vec3d;
 public final class Freecam extends Module {
     public static volatile boolean active;
     private static volatile boolean blockInteract = true;
+    private static volatile boolean freelookNoClip;
+
+    public static boolean shouldIgnoreCameraCollision() {
+        return active && freelookNoClip;
+    }
 
     private final ModeSetting cameraMode;
     private final NumberSetting speed;
@@ -121,6 +126,7 @@ public final class Freecam extends Module {
         velocityY = 0.0;
         velocityZ = 0.0;
         blockInteract = blockInteractions.value;
+        freelookNoClip = cameraMode.is("Freelook");
         active = true;
 
         // The camera entity is never added to the world or sent to the server.
@@ -130,6 +136,7 @@ public final class Freecam extends Module {
     @Override
     protected void onDisable() {
         active = false;
+        freelookNoClip = false;
 
         Entity oldCamera = camera;
         camera = null;
@@ -160,6 +167,7 @@ public final class Freecam extends Module {
         }
 
         blockInteract = blockInteractions.value;
+        freelookNoClip = cameraMode.is("Freelook");
         camera.noClip = true;
         camera.setNoGravity(true);
 
