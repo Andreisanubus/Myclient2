@@ -109,8 +109,10 @@ public final class Freecam extends Module {
         active = false;
         Entity old = camera;
         camera = null;
-        if (mc.player != null) mc.setCameraEntity(mc.player);
-        if (old != null) old.discard();
+        if (old != null) {
+            if (mc.player != null && mc.getCameraEntity() == old) mc.setCameraEntity(mc.player);
+            old.discard();
+        }
         velocityX = velocityY = velocityZ = 0.0;
     }
 
