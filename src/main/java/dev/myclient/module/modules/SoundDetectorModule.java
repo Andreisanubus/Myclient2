@@ -58,7 +58,7 @@ public final class SoundDetectorModule extends Module {
                         double x, double y, double z, float volume) {
         if (mc.player == null || mc.world == null || volume < minimumVolume.get()) return;
         Vec3d pos = new Vec3d(x, y, z);
-        double distance = mc.player.getPos().distanceTo(pos);
+        double distance = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()).distanceTo(pos);
         if (distance > range.get()) return;
 
         Identifier id = sound.getKey().map(key -> key.getValue())
@@ -101,7 +101,7 @@ public final class SoundDetectorModule extends Module {
             alerts.removeLast();
         }
         if (lastBySound.size() > 512) {
-            long cutoff = now - Math.max(5000L, cooldown.get() * 4L);
+            long cutoff = now - (long) Math.max(5000.0, cooldown.get() * 4.0);
             lastBySound.entrySet().removeIf(entry -> entry.getValue() < cutoff);
         }
     }
