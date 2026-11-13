@@ -18,8 +18,7 @@ public final class Catalog {
         m.add(SusFinder.susChunkFinder());
         m.add(new ChunkFinderModule());
         m.add(new HiveChunkFinderModule());
-        m.add(new TickActivityModule());
-        m.add(new PerformanceModule());
+
         m.add(SusFinder.amethystBypass());
         st(m, Category.BASE_RAID, "Tunnel Base Finder", "b:Follow Sus Chunks:true", "n:Scan Radius:64:16:256:8", "m:Move:Walk:Walk|Fly");
         st(m, Category.BASE_RAID, "Media Base Finder", "n:Min Storage:8:1:64:1", "n:Radius:96:16:256:8");
@@ -69,7 +68,9 @@ public final class Catalog {
         st(m, Category.RENDER, "Region Map", "n:Zoom:1:1:5:1", "b:Show Chunks:true");
         m.add(new Freecam());
         m.add(new TickActivityModule());
-        m.add(new SoundDetectorModule());
+        m.add(new SoundDetector());
+        m.add(new PerformanceModule());
+
         m.add(BlockSetEsp.xray());
         st(m, Category.RENDER, "NoRender", "b:Rain And Snow:true", "b:Lava Overlay:true", "b:Fire On Entities:true");
         m.add(new Zoom());
