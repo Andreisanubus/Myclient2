@@ -103,7 +103,7 @@ public final class TickActivityModule extends Module {
             alerts.removeLast();
         }
         if (lastByPosition.size() > 4096) {
-            long cutoff = now - Math.max(5000L, cooldown.get() * 4L);
+            long cutoff = now - (long) Math.max(5000.0, cooldown.get() * 4.0);
             lastByPosition.entrySet().removeIf(entry -> entry.getValue() < cutoff);
         }
     }
