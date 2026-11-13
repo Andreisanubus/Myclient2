@@ -1,6 +1,7 @@
 package dev.myclient.mixin;
 
 import dev.myclient.module.modules.SoundDetector;
+import dev.myclient.module.modules.StaffDetector;
 import net.minecraft.util.Identifier;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
@@ -17,5 +18,6 @@ public abstract class ClientPlayNetworkHandlerSoundMixin {
                 .map(key -> key.getValue())
                 .orElse(Identifier.of("minecraft", "unknown"));
         SoundDetector.soundPlayed(id, packet.getX(), packet.getY(), packet.getZ());
+        StaffDetector.soundPlayed(id, packet.getX(), packet.getY(), packet.getZ());
     }
 }
