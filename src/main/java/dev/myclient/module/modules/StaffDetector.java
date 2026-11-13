@@ -177,7 +177,7 @@ public final class StaffDetector extends Module {
         if (!suspicious) return;
 
         Vec3d soundPos = new Vec3d(x, y, z);
-        if (detector.mc.player.getPos().squaredDistanceTo(soundPos)
+        if (new Vec3d(detector.mc.player.getX(), detector.mc.player.getY(), detector.mc.player.getZ()).squaredDistanceTo(soundPos)
                 > detector.soundRange.get() * detector.soundRange.get()) return;
 
         boolean visiblePlayerNearby = detector.mc.world.getPlayers().stream()
