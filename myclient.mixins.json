@@ -6,7 +6,8 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "LivingEntityAccessor",
-    "ClientWorldBlockUpdateMixin"
+    "ClientWorldBlockUpdateMixin",
+    "ClientPlayNetworkHandlerSoundMixin"
   ],
   "injectors": {
     "defaultRequire": 1
