@@ -22,8 +22,8 @@ import java.util.function.LongPredicate;
 
 public final class ChunkScanner {
 
-    private static final int STEP_BLOCKS = 1024;
-    private static final long TICK_BUDGET_NANOS = 1_500_000L;
+    private static volatile int stepBlocks = 1024;
+    private static volatile long tickBudgetNanos = 1_500_000L;
     private static final int MAX_QUEUED_CHUNKS = 4096;
 
     private static final MinecraftClient MC = MinecraftClient.getInstance();
@@ -39,6 +39,11 @@ public final class ChunkScanner {
     private static boolean initialized;
 
     private ChunkScanner() {
+    }
+
+    public static void configure(int blocksPerStep, long budgetNanos) {
+        stepBlocks = Math.max(0, Math.min(4096, blocksPerStep));
+        tickBudgetNanos = Math.max(0L, Math.min(4_000_000L, budgetNanos));
     }
 
     public interface Consumer {
@@ -147,7 +152,8 @@ public final class ChunkScanner {
             return;
         }
 
-        long deadline = System.nanoTime() + TICK_BUDGET_NANOS;
+        if (stepBlocks <= 0 || tickBudgetNanos <= 0) return;
+        long deadline = System.nanoTime() + tickBudgetNanos;
 
         while (System.nanoTime() < deadline) {
             if (cursor == null) {
@@ -159,7 +165,7 @@ public final class ChunkScanner {
             }
 
             boolean finished = cursor.step(
-                    STEP_BLOCKS,
+                    stepBlocks,
                     deadline
             );
 
