@@ -25,7 +25,7 @@ import java.util.Map;
 
 public final class ChunkFinderModule extends Module {
 
-    private static final long REVEAL_DURATION_NANOS = 600_000_000L;
+    private static final long REVEAL_DURATION_NANOS = 150_000_000L;
 
     private final BlockLayer layer = new BlockLayer();
 
@@ -35,7 +35,7 @@ public final class ChunkFinderModule extends Module {
     private long revealStartNanos;
 
     private final NumberSetting renderDistance =
-            num("Render Distance", 128, 16, 256, 16);
+            num("Render Distance", 2048, 16, 2048, 16);
 
     private final Setting<Boolean> showFill =
             bool("Show Fill", true);
@@ -44,13 +44,13 @@ public final class ChunkFinderModule extends Module {
             bool("Show Outline", true);
 
     private final NumberSetting fillAlpha =
-            num("Fill Alpha", 100, 0, 100, 5);
+            num("Fill Alpha", 20, 0, 100, 5);
 
     private final NumberSetting boxSize =
             num("Box Size", 1.0, 0.1, 2.0, 0.1);
 
     private final NumberSetting lineWidth =
-            num("Line Width", 1, 1, 5, 1);
+            num("Line Width", 1.5, 0.5, 5, 0.5);
 
     private final Setting<Boolean> distanceFade =
             bool("Distance Fade", true);
@@ -68,7 +68,7 @@ public final class ChunkFinderModule extends Module {
             bool("Tracers", false);
 
     private final NumberSetting tracerWidth =
-            num("Tracer Width", 1, 1, 5, 1);
+            num("Tracer Width", 1.5, 0.5, 5, 0.5);
 
     private final NumberSetting maxTracers =
             num("Max Tracers", 256, 16, 256, 16);
@@ -98,7 +98,7 @@ public final class ChunkFinderModule extends Module {
     }
 
     public ChunkFinderModule() {
-        super("Chunk Finder", Category.BASE_RAID);
+        super("Block ESP", Category.RENDER);
 
         header("General");
         add(renderDistance);
@@ -221,9 +221,6 @@ public final class ChunkFinderModule extends Module {
         RegistryKey<World> dimension =
                 mc.world.getRegistryKey();
 
-        int currentChunkX = mc.player.getChunkPos().x;
-        int currentChunkZ = mc.player.getChunkPos().z;
-
         double maxDistance = renderDistance.get();
         double maxDistanceSquared = maxDistance * maxDistance;
 
@@ -247,9 +244,7 @@ public final class ChunkFinderModule extends Module {
 
             BlockLayer.Geometry geometry = layer.geometry(
                     dimension,
-                    category,
-                    currentChunkX,
-                    currentChunkZ
+                    category
             );
 
             List<BlockPos> positions = geometry.positions();
