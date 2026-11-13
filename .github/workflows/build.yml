@@ -103,8 +103,12 @@ jobs:
             src/main/java/dev/myclient/chunkfinder \
             src/main/java/dev/myclient/module/modules/ChunkFinderModule.java \
             src/main/java/dev/myclient/module/modules/HiveChunkFinderModule.java \
+            src/main/java/dev/myclient/module/modules/TickActivityModule.java \
+            src/main/java/dev/myclient/module/modules/SoundDetectorModule.java \
             src/main/java/dev/myclient/module/Catalog.java \
-            src/main/java/dev/myclient/mixin/ClientWorldBlockUpdateMixin.java
+            src/main/java/dev/myclient/mixin/ClientWorldBlockUpdateMixin.java \
+            src/main/java/dev/myclient/mixin/ClientPlayNetworkHandlerSoundMixin.java \
+            src/main/resources/myclient.mixins.json
 
       - name: Upload Chunk Finder and Block ESP source ZIP
         uses: actions/upload-artifact@v4
