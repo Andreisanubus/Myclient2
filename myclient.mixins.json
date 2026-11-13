@@ -9,7 +9,8 @@
     "ClientWorldBlockUpdateMixin",
     "ClientPlayNetworkHandlerSoundMixin",
     "ClientCommonNetworkHandlerMarkerMixin",
-    "ClientConnectionPacketBlockMixin"
+    "ClientConnectionPacketBlockMixin",
+    "CameraClipMixin"
   ],
   "injectors": {
     "defaultRequire": 1
