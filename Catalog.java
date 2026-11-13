@@ -19,7 +19,6 @@ public final class Catalog {
         m.add(new ChunkFinderModule());
         m.add(new HiveChunkFinderModule());
         m.add(new TickActivityModule());
-        m.add(new SoundDetectorModule());
         m.add(new PerformanceModule());
         m.add(SusFinder.amethystBypass());
         st(m, Category.BASE_RAID, "Tunnel Base Finder", "b:Follow Sus Chunks:true", "n:Scan Radius:64:16:256:8", "m:Move:Walk:Walk|Fly");
