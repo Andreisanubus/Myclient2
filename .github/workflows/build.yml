@@ -104,7 +104,7 @@ jobs:
             src/main/java/dev/myclient/module/modules/ChunkFinderModule.java \
             src/main/java/dev/myclient/module/modules/HiveChunkFinderModule.java \
             src/main/java/dev/myclient/module/modules/TickActivityModule.java \
-            src/main/java/dev/myclient/module/modules/SoundDetectorModule.java \
+            src/main/java/dev/myclient/module/modules/SoundDetector.java \
             src/main/java/dev/myclient/module/Catalog.java \
             src/main/java/dev/myclient/mixin/ClientWorldBlockUpdateMixin.java \
             src/main/java/dev/myclient/mixin/ClientPlayNetworkHandlerSoundMixin.java \
