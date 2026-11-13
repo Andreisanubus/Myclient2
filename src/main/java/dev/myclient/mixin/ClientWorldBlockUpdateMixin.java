@@ -1,12 +1,8 @@
-
 package dev.myclient.mixin;
 
 import dev.myclient.chunkfinder.ChunkScanner;
 import dev.myclient.module.modules.HiveChunkFinderModule;
-import dev.myclient.module.modules.ActivityDetector;
-import org.spongepowered.asm.mixin.Unique;
-import dev.myclient.module.modules.ActivityDetector;
-import org.spongepowered.asm.mixin.Unique;
+import dev.myclient.module.modules.TickActivityModule;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.client.world.ClientWorld;
@@ -20,48 +16,35 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(ClientWorld.class)
 public abstract class ClientWorldBlockUpdateMixin {
 
-    @Unique private BlockState myclient$oldState;
-
-    @Unique private BlockState myclient$oldState;
-
-    @Inject(method = "setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;II)Z", at = @At("HEAD"))
-    private void myclient$captureOldState(BlockPos pos, BlockState state, int flags, int maxUpdateDepth, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Boolean> cir) {
-        myclient$oldState = ((ClientWorld) (Object) this).getBlockState(pos);
-    }
-
-    @Inject(method = "setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;II)Z", at = @At("HEAD"))
-    private void myclient$captureOldState(BlockPos pos, BlockState state, int flags, int maxUpdateDepth, CallbackInfoReturnable<Boolean> cir) {
-        myclient$oldState = ((ClientWorld) (Object) this).getBlockState(pos);
-    }
-
     @Inject(
             method = "setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;II)Z",
-            at = @At("TAIL")
+            at = @At("HEAD")
     )
-    private void myclient$onBlockUpdate(
+    private void myclient$onBlockUpdateHead(
             BlockPos pos,
             BlockState state,
             int flags,
             int maxUpdateDepth,
             CallbackInfoReturnable<Boolean> cir
     ) {
-        if (!cir.getReturnValue()) {
-            return;
-        }
+        ClientWorld world = (ClientWorld) (Object) this;
+        TickActivityModule.blockChanged(world, pos, world.getBlockState(pos), state);
+    }
 
-        BlockState oldState = myclient$oldState;
-        myclient$oldState = null;
-        ActivityDetector.blockChanged(pos, oldState != null && oldState.isAir(), state.isAir());
-
-        BlockState oldState = myclient$oldState;
-        myclient$oldState = null;
-        ActivityDetector.blockChanged(pos, oldState != null && oldState.isAir(), state.isAir());
-
-        ChunkScanner.blockUpdated(
-                (ClientWorld) (Object) this,
-                pos,
-                state
-        );
-        HiveChunkFinderModule.blockUpdated((ClientWorld) (Object) this, pos);
+    @Inject(
+            method = "setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;II)Z",
+            at = @At("TAIL")
+    )
+    private void myclient$onBlockUpdateTail(
+            BlockPos pos,
+            BlockState state,
+            int flags,
+            int maxUpdateDepth,
+            CallbackInfoReturnable<Boolean> cir
+    ) {
+        if (!cir.getReturnValue()) return;
+        ClientWorld world = (ClientWorld) (Object) this;
+        ChunkScanner.blockUpdated(world, pos, state);
+        HiveChunkFinderModule.blockUpdated(world, pos);
     }
 }
