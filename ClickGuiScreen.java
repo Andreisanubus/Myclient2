@@ -43,7 +43,7 @@ public class ClickGuiScreen extends Screen {
     private StringSetting editing;
     private Box focus;
     private Module binding, winMod;
-    private int winSec, winScroll, winContentH, wx, wy, ww, wh;
+    private int winSec, winScroll, winContentH, winSectionScroll, winSectionContentH, wx, wy, ww, wh;
     private Slider dragging;
     private HudModule dragHud;
     private int dragDX, dragDY;
@@ -267,18 +267,29 @@ public class ClickGuiScreen extends Screen {
         String hint = "doar setarile acestui modul";
         if (ww > 420 - 10) txt(c, hint, wx + ww - tw(hint) - 8, fy + 7, DIM);
 
-        // bara din stanga: sectiunile
+        // Bara din stanga: sectiunile au scroll independent de setarile din dreapta.
         List<Sec> secs = sections(m);
         if (winSec >= secs.size()) winSec = 0;
-        int sy = wy + 30;
+        int sectionTop = wy + 30;
+        int sectionBottom = fy - 4;
+        int sectionViewH = Math.max(0, sectionBottom - sectionTop);
+        winSectionContentH = secs.size() * 17;
+        winSectionScroll = Math.max(0, Math.min(
+                Math.max(0, winSectionContentH - sectionViewH), winSectionScroll));
+        c.enableScissor(wx + 4, sectionTop, wx + 100, sectionBottom);
+        int sy = sectionTop - winSectionScroll;
         for (int i = 0; i < secs.size(); i++) {
             int idx = i;
             if (i == winSec) RenderUtil.roundedRect(c, wx + 6, sy, 92, 15, Math.max(2, Theme.radius / 2), Theme.accent);
             else if (in(mx, my, wx + 6, sy, 92, 15)) RenderUtil.roundedRect(c, wx + 6, sy, 92, 15, Math.max(2, Theme.radius / 2), 0x22FFFFFF);
             txt(c, textRenderer.trimToWidth(secs.get(i).title(), 82), wx + 12, sy + 4, i == winSec ? WHITE : GRAY);
-            hit(wx + 6, sy, 92, 15, () -> { winSec = idx; winScroll = 0; focus = null; editing = null; }, null);
+            int hitY0 = Math.max(sy, sectionTop);
+            int hitY1 = Math.min(sy + 15, sectionBottom);
+            if (hitY1 > hitY0) hit(wx + 6, hitY0, 92, hitY1 - hitY0,
+                    () -> { winSec = idx; winScroll = 0; focus = null; editing = null; }, null);
             sy += 17;
         }
+        c.disableScissor();
         if (secs.isEmpty()) txt(c, "Fara setari", wx + 12, wy + 34, DIM);
         c.fill(wx + 102, wy + 28, wx + 103, fy - 4, 0x22FFFFFF);
 
@@ -567,7 +578,17 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double hAmount, double vAmount) {
-        if (winMod != null) { winScroll = Math.max(0, winScroll - (int) (vAmount * 14)); return true; }
+        if (winMod != null) {
+            int fy = wy + wh - 22;
+            if (in(mx, my, wx + 4, wy + 28, wx + 100 - (wx + 4), Math.max(0, fy - 4 - (wy + 28)))) {
+                winSectionScroll = Math.max(0, Math.min(
+                        Math.max(0, winSectionContentH - Math.max(0, fy - 4 - (wy + 30))),
+                        winSectionScroll - (int) (vAmount * 18)));
+            } else if (in(mx, my, wx + 104, wy + 28, ww - 108, Math.max(0, fy - 4 - (wy + 28)))) {
+                winScroll = Math.max(0, winScroll - (int) (vAmount * 14));
+            }
+            return true;
+        }
         if (tab == 0) scroll = Math.max(0, Math.min(Math.max(0, contentH - (height - 44)), scroll - (int) (vAmount * 20)));
         return true;
     }
