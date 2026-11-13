@@ -13,6 +13,7 @@ import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.state.property.Properties;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Vec3d;
@@ -25,17 +26,15 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
- * Sober-style Chunk Finder port for Yarn 1.21.11.
- *
- * Detects loaded chunks containing a fully honey-filled bee nest or beehive,
- * waits for chunks to settle before checking them, merges nearby hits, and
- * renders animated world-space markers.
+ * Multi-category loaded-chunk finder for Fabric 1.21.11.
+ * It only examines chunks already delivered to the client by the server.
  */
 public final class HiveChunkFinderModule extends Module {
     private static final int SETTLE_TICKS = 200;
@@ -46,22 +45,38 @@ public final class HiveChunkFinderModule extends Module {
     private static final Set<HiveChunkFinderModule> INSTANCES =
             new CopyOnWriteArraySet<>();
 
-    private final NumberSetting mergeRadius =
-            num("Merge Radius", 4, 1, 8, 1);
-    private final NumberSetting scanRadius =
-            num("Scan Radius", 12, 2, 32, 1);
-    private final NumberSetting minimumHoney =
-            num("Minimum Honey Level", 5, 1, 5, 1);
-    private final Setting<Boolean> detectNests =
-            bool("Detect Bee Nests", true);
-    private final Setting<Boolean> detectHives =
-            bool("Detect Beehives", true);
-    private final Setting<Boolean> notifications =
-            bool("Notifications", true);
-    private final Setting<Boolean> beam =
-            bool("Beam", false);
-    private final ModeSetting markerColor =
-            color("Color", "Orange");
+    private final NumberSetting mergeRadius = num("Merge Radius", 4, 1, 8, 1);
+    private final NumberSetting scanRadius = num("Scan Radius", 12, 2, 32, 1);
+    private final NumberSetting minimumHoney = num("Minimum Honey Level", 5, 1, 5, 1);
+
+    private final Setting<Boolean> detectNests = bool("Detect Bee Nests", true);
+    private final Setting<Boolean> detectHives = bool("Detect Beehives", true);
+    private final NumberSetting minContainers = num("Min Containers", 3, 1, 64, 1);
+    private final Setting<Boolean> detectContainers = bool("Detect Chests / Barrels / Shulkers", true);
+    private final NumberSetting minHoppers = num("Min Hoppers", 4, 1, 64, 1);
+    private final Setting<Boolean> detectHoppers = bool("Detect Hopper Clusters", true);
+    private final NumberSetting minMachines = num("Min Machines", 3, 1, 64, 1);
+    private final Setting<Boolean> detectMachines = bool("Detect Machines", true);
+    private final NumberSetting minRedstone = num("Min Redstone Components", 8, 1, 128, 1);
+    private final Setting<Boolean> detectRedstone = bool("Detect Redstone Networks", true);
+    private final NumberSetting minSpawners = num("Min Spawners", 1, 1, 16, 1);
+    private final Setting<Boolean> detectSpawners = bool("Detect Spawners", true);
+    private final NumberSetting minPlants = num("Min Growth Blocks", 8, 1, 128, 1);
+    private final Setting<Boolean> detectKelp = bool("Detect Mature Kelp", true);
+    private final Setting<Boolean> detectVines = bool("Detect Vines", true);
+    private final Setting<Boolean> detectCaveVines = bool("Detect Cave Vines", true);
+    private final Setting<Boolean> detectBamboo = bool("Detect Bamboo", true);
+    private final Setting<Boolean> detectCocoa = bool("Detect Cocoa Pods", true);
+    private final NumberSetting minAmethyst = num("Min Budding Amethyst", 4, 1, 64, 1);
+    private final Setting<Boolean> detectAmethyst = bool("Detect Amethyst Geodes", true);
+    private final Setting<Boolean> notifications = bool("Notifications", true);
+
+    private final ModeSetting markerColor = color("Color", "Orange");
+    private final Setting<Boolean> beam = bool("Beam", false);
+    private final Setting<Boolean> animatedMarker = bool("Animated Marker", true);
+    private final NumberSetting fillOpacity = num("Fill Opacity", 10, 0, 60, 5);
+    private final NumberSetting outlineOpacity = num("Outline Opacity", 90, 10, 100, 5);
+    private final NumberSetting markerHeight = num("Marker Height Offset", 0.025, 0.0, 2.0, 0.025);
 
     private final Map<Long, Long> firstSeenTick = new HashMap<>();
     private final Set<Long> checked = new HashSet<>();
@@ -77,22 +92,54 @@ public final class HiveChunkFinderModule extends Module {
     private int scanCursor;
     private long tick;
 
-    private record HitChunk(int x, int z, long foundAtNanos) {}
+    private record HitChunk(int x, int z, long foundAtNanos, String details) {}
     private record Cluster(int minX, int maxX, int minZ, int maxZ,
-                           double centerX, double centerZ, long createdAtNanos) {}
+                           double centerX, double centerZ,
+                           long createdAtNanos, String details) {}
 
     public HiveChunkFinderModule() {
         super("Chunk Finder", Category.BASE_RAID);
-        header("Detection");
+        header("Scan");
         add(mergeRadius);
         add(scanRadius);
+        add(notifications);
+
+        header("Bee Structures");
         add(detectNests);
         add(detectHives);
         add(minimumHoney);
-        add(notifications);
+
+        header("Storage And Utility");
+        add(detectContainers);
+        add(minContainers);
+        add(detectHoppers);
+        add(minHoppers);
+        add(detectMachines);
+        add(minMachines);
+
+        header("Redstone And Spawners");
+        add(detectRedstone);
+        add(minRedstone);
+        add(detectSpawners);
+        add(minSpawners);
+
+        header("Natural Structures");
+        add(detectKelp);
+        add(detectVines);
+        add(detectCaveVines);
+        add(detectBamboo);
+        add(detectCocoa);
+        add(minPlants);
+        add(detectAmethyst);
+        add(minAmethyst);
+
         header("Marker");
         add(markerColor);
         add(beam);
+        add(animatedMarker);
+        add(fillOpacity);
+        add(outlineOpacity);
+        add(markerHeight);
         INSTANCES.add(this);
     }
 
@@ -121,7 +168,6 @@ public final class HiveChunkFinderModule extends Module {
         tick = 0;
     }
 
-    /** A block update invalidates the settled scan for its containing chunk. */
     public static void blockUpdated(ClientWorld world, net.minecraft.util.math.BlockPos pos) {
         if (world == null || pos == null) return;
         long key = ChunkPos.toLong(pos.getX() >> 4, pos.getZ() >> 4);
@@ -181,19 +227,123 @@ public final class HiveChunkFinderModule extends Module {
             if (chunk == null) continue;
 
             checked.add(key);
-            if (hasSelectedHoneyHive(chunk)) {
-                hits.put(key, new HitChunk(chunkX, chunkZ, System.nanoTime()));
+            List<String> detections = scanChunk(chunk);
+            if (!detections.isEmpty()) {
+                String details = String.join(", ", detections);
+                hits.put(key, new HitChunk(chunkX, chunkZ, System.nanoTime(), details));
                 changed = true;
                 if (notifications.value) {
                     mc.player.sendMessage(Text.literal(
-                            "[Chunk Finder] Full honey hive detected in chunk "
-                                    + chunkX + ", " + chunkZ
+                            "[Chunk Finder] " + details + " in chunk " + chunkX + ", " + chunkZ
                     ), false);
                 }
             }
         }
 
         if (changed) rebuildClusters();
+    }
+
+    private List<String> scanChunk(WorldChunk chunk) {
+        int containers = 0;
+        int hoppers = 0;
+        int machines = 0;
+        int redstone = 0;
+        int spawners = 0;
+        int matureKelp = 0;
+        int vines = 0;
+        int caveVines = 0;
+        int bamboo = 0;
+        int cocoa = 0;
+        int buddingAmethyst = 0;
+        boolean fullNest = false;
+        boolean fullHive = false;
+
+        for (ChunkSection section : chunk.getSectionArray()) {
+            if (section == null || section.isEmpty()) continue;
+
+            for (int y = 0; y < 16; y++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int x = 0; x < 16; x++) {
+                        BlockState state = section.getBlockState(x, y, z);
+                        if (state.isAir()) continue;
+
+                        if (state.isOf(Blocks.BEE_NEST)
+                                && state.get(BeehiveBlock.HONEY_LEVEL) >= minimumHoney.asInt()) {
+                            fullNest = true;
+                        }
+                        if (state.isOf(Blocks.BEEHIVE)
+                                && state.get(BeehiveBlock.HONEY_LEVEL) >= minimumHoney.asInt()) {
+                            fullHive = true;
+                        }
+
+                        if (state.isOf(Blocks.CHEST) || state.isOf(Blocks.TRAPPED_CHEST)
+                                || state.isOf(Blocks.BARREL) || state.isOf(Blocks.SHULKER_BOX)
+                                || state.isOf(Blocks.ENDER_CHEST)) containers++;
+
+                        if (state.isOf(Blocks.HOPPER)) hoppers++;
+
+                        if (state.isOf(Blocks.FURNACE) || state.isOf(Blocks.BLAST_FURNACE)
+                                || state.isOf(Blocks.SMOKER) || state.isOf(Blocks.DISPENSER)
+                                || state.isOf(Blocks.DROPPER) || state.isOf(Blocks.OBSERVER)
+                                || state.isOf(Blocks.PISTON) || state.isOf(Blocks.STICKY_PISTON)
+                                || state.isOf(Blocks.CRAFTER) || state.isOf(Blocks.BREWING_STAND)) {
+                            machines++;
+                        }
+
+                        if (state.isOf(Blocks.REDSTONE_WIRE) || state.isOf(Blocks.REPEATER)
+                                || state.isOf(Blocks.COMPARATOR) || state.isOf(Blocks.REDSTONE_TORCH)
+                                || state.isOf(Blocks.REDSTONE_WALL_TORCH) || state.isOf(Blocks.LEVER)
+                                || state.isOf(Blocks.STONE_BUTTON) || state.isOf(Blocks.OAK_BUTTON)
+                                || state.isOf(Blocks.STONE_PRESSURE_PLATE)
+                                || state.isOf(Blocks.HEAVY_WEIGHTED_PRESSURE_PLATE)
+                                || state.isOf(Blocks.LIGHT_WEIGHTED_PRESSURE_PLATE)
+                                || state.isOf(Blocks.REDSTONE_LAMP) || state.isOf(Blocks.DAYLIGHT_DETECTOR)
+                                || state.isOf(Blocks.TARGET) || state.isOf(Blocks.TRIPWIRE_HOOK)) {
+                            redstone++;
+                        }
+
+                        if (state.isOf(Blocks.SPAWNER) || state.isOf(Blocks.TRIAL_SPAWNER)) spawners++;
+                        if (state.isOf(Blocks.KELP) && state.get(Properties.AGE_25) == 25) matureKelp++;
+                        if (state.isOf(Blocks.VINE)) vines++;
+                        if (state.isOf(Blocks.CAVE_VINES) || state.isOf(Blocks.CAVE_VINES_PLANT)) caveVines++;
+                        if (state.isOf(Blocks.BAMBOO)) bamboo++;
+                        if (state.isOf(Blocks.COCOA)) cocoa++;
+                        if (state.isOf(Blocks.BUDDING_AMETHYST)) buddingAmethyst++;
+                    }
+                }
+            }
+        }
+
+        List<String> found = new ArrayList<>();
+        if (detectNests.value && fullNest) found.add("Full Bee Nest");
+        if (detectHives.value && fullHive) found.add("Full Beehive");
+        if (detectContainers.value && containers >= minContainers.asInt()) found.add("Storage x" + containers);
+        if (detectHoppers.value && hoppers >= minHoppers.asInt()) found.add("Hoppers x" + hoppers);
+        if (detectMachines.value && machines >= minMachines.asInt()) found.add("Machines x" + machines);
+        if (detectRedstone.value && redstone >= minRedstone.asInt()) found.add("Redstone x" + redstone);
+        if (detectSpawners.value && spawners >= minSpawners.asInt()) found.add("Spawners x" + spawners);
+
+        int plantTotal = 0;
+        if (detectKelp.value) plantTotal += matureKelp;
+        if (detectVines.value) plantTotal += vines;
+        if (detectCaveVines.value) plantTotal += caveVines;
+        if (detectBamboo.value) plantTotal += bamboo;
+        if (detectCocoa.value) plantTotal += cocoa;
+        if (plantTotal >= minPlants.asInt()) {
+            List<String> plants = new ArrayList<>();
+            if (detectKelp.value && matureKelp > 0) plants.add("Kelp " + matureKelp);
+            if (detectVines.value && vines > 0) plants.add("Vines " + vines);
+            if (detectCaveVines.value && caveVines > 0) plants.add("Cave Vines " + caveVines);
+            if (detectBamboo.value && bamboo > 0) plants.add("Bamboo " + bamboo);
+            if (detectCocoa.value && cocoa > 0) plants.add("Cocoa " + cocoa);
+            found.add("Growth: " + String.join("/", plants));
+        }
+
+        if (detectAmethyst.value && buddingAmethyst >= minAmethyst.asInt()) {
+            found.add("Amethyst Geode (" + buddingAmethyst + " budding blocks)");
+        }
+
+        return found;
     }
 
     private void rebuildScanOrder(int centerX, int centerZ, int viewDistance) {
@@ -228,29 +378,6 @@ public final class HiveChunkFinderModule extends Module {
         if (removed) rebuildClusters();
     }
 
-    private boolean hasSelectedHoneyHive(WorldChunk chunk) {
-        if (!detectNests.value && !detectHives.value) return false;
-        for (ChunkSection section : chunk.getSectionArray()) {
-            if (section == null || section.isEmpty()) continue;
-
-            for (int y = 0; y < 16; y++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int x = 0; x < 16; x++) {
-                        BlockState state = section.getBlockState(x, y, z);
-                        boolean selectedType =
-                                (detectNests.value && state.isOf(Blocks.BEE_NEST))
-                                || (detectHives.value && state.isOf(Blocks.BEEHIVE));
-                        if (selectedType
-                                && state.get(BeehiveBlock.HONEY_LEVEL) >= minimumHoney.asInt()) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
     private void rebuildClusters() {
         if (hits.isEmpty()) {
             clusters = List.of();
@@ -274,6 +401,7 @@ public final class HiveChunkFinderModule extends Module {
             long sumX = 0;
             long sumZ = 0;
             int count = 0;
+            LinkedHashSet<String> details = new LinkedHashSet<>();
 
             while (!queue.isEmpty()) {
                 long current = queue.removeFirst();
@@ -287,6 +415,7 @@ public final class HiveChunkFinderModule extends Module {
                 sumX += hit.x();
                 sumZ += hit.z();
                 count++;
+                details.addAll(List.of(hit.details().split(", ")));
 
                 for (int dx = -radius; dx <= radius; dx++) {
                     for (int dz = -radius; dz <= radius; dz++) {
@@ -300,7 +429,8 @@ public final class HiveChunkFinderModule extends Module {
                 double centerX = (sumX / (double) count + 0.5) * 16.0;
                 double centerZ = (sumZ / (double) count + 0.5) * 16.0;
                 rebuilt.add(new Cluster(minX, maxX, minZ, maxZ,
-                        centerX, centerZ, System.nanoTime()));
+                        centerX, centerZ, System.nanoTime(),
+                        String.join(", ", details)));
             }
         }
 
@@ -315,10 +445,14 @@ public final class HiveChunkFinderModule extends Module {
         int rgb = Colors.of(markerColor.value) & 0xFFFFFF;
 
         for (Cluster cluster : clusters) {
-            double progress = Math.max(0.0, Math.min(1.0,
-                    (now - cluster.createdAtNanos()) / (double) REVEAL_NANOS));
+            double progress = animatedMarker.value
+                    ? Math.max(0.0, Math.min(1.0,
+                        (now - cluster.createdAtNanos()) / (double) REVEAL_NANOS))
+                    : 1.0;
             double eased = 1.0 - Math.pow(1.0 - progress, 3.0);
-            double pulse = 0.92 + 0.08 * Math.sin((now - cluster.createdAtNanos()) / 420_000_000.0);
+            double pulse = animatedMarker.value
+                    ? 0.92 + 0.08 * Math.sin((now - cluster.createdAtNanos()) / 420_000_000.0)
+                    : 1.0;
 
             double x0 = cluster.minX() * 16.0;
             double x1 = (cluster.maxX() + 1) * 16.0;
@@ -326,7 +460,7 @@ public final class HiveChunkFinderModule extends Module {
             double z1 = (cluster.maxZ() + 1) * 16.0;
             int topY = mc.world.getTopY(Heightmap.Type.WORLD_SURFACE,
                     (int) Math.floor(cluster.centerX()), (int) Math.floor(cluster.centerZ()));
-            double y = Math.max(BASE_Y, topY) + 0.025;
+            double y = Math.max(BASE_Y, topY) + markerHeight.get();
 
             Vec3d a = new Vec3d(x0, y, z0);
             Vec3d b = new Vec3d(x1, y, z0);
@@ -334,9 +468,9 @@ public final class HiveChunkFinderModule extends Module {
             Vec3d d = new Vec3d(x0, y, z1);
 
             Proj.fillPoly(context, new Vec3d[]{a, b, c, d},
-                    Proj.alpha(rgb, (int) (24 * eased * pulse)));
+                    Proj.alpha(rgb, (int) (fillOpacity.get() * 2.55 * eased * pulse)));
 
-            int border = Proj.alpha(rgb, (int) (220 * eased));
+            int border = Proj.alpha(rgb, (int) (outlineOpacity.get() * 2.55 * eased));
             drawLine(context, a, b, border);
             drawLine(context, b, c, border);
             drawLine(context, c, d, border);
