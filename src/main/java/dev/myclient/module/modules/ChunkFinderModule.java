@@ -293,7 +293,8 @@ public final class ChunkFinderModule extends Module {
                             playerZ
                     );
 
-            if (nearestDistanceSquared > maxDistanceSquared) {
+            double categoryRange = Math.min(maxDistance, settings.range.get());
+            if (nearestDistanceSquared > categoryRange * categoryRange) {
                 continue;
             }
 
