@@ -76,7 +76,7 @@ public final class StaffDetector extends Module {
         signals.clear();
         tick = 0;
         lastWorld = mc.world;
-        lastPosition = mc.player == null ? null : mc.player.getPos();
+        lastPosition = mc.player == null ? null : new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
     }
 
     private static boolean isKnownStaff(String name) {
@@ -182,7 +182,7 @@ public final class StaffDetector extends Module {
 
         boolean visiblePlayerNearby = detector.mc.world.getPlayers().stream()
                 .anyMatch(p -> p != detector.mc.player && p.isAlive()
-                        && p.getPos().squaredDistanceTo(soundPos) < 64.0);
+                        && new Vec3d(p.getX(), p.getY(), p.getZ()).squaredDistanceTo(soundPos) < 64.0);
         if (!visiblePlayerNearby) detector.addSignal("Unattributed nearby sound: " + path, 1);
     }
 
