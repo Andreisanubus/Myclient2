@@ -7,7 +7,9 @@
   "client": [
     "LivingEntityAccessor",
     "ClientWorldBlockUpdateMixin",
-    "ClientPlayNetworkHandlerSoundMixin"
+    "ClientPlayNetworkHandlerSoundMixin",
+    "ClientCommonNetworkHandlerMarkerMixin",
+    "ClientConnectionPacketBlockMixin"
   ],
   "injectors": {
     "defaultRequire": 1
