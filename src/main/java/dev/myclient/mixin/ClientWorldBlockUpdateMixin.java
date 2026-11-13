@@ -9,12 +9,15 @@ import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ClientWorld.class)
 public abstract class ClientWorldBlockUpdateMixin {
+
+    @Unique private BlockState myclient$oldState;
 
     @Inject(
             method = "setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;II)Z",
@@ -28,7 +31,7 @@ public abstract class ClientWorldBlockUpdateMixin {
             CallbackInfoReturnable<Boolean> cir
     ) {
         ClientWorld world = (ClientWorld) (Object) this;
-        TickActivityModule.blockChanged(world, pos, world.getBlockState(pos), state);
+        myclient$oldState = world.getBlockState(pos);
     }
 
     @Inject(
@@ -44,6 +47,8 @@ public abstract class ClientWorldBlockUpdateMixin {
     ) {
         if (!cir.getReturnValue()) return;
         ClientWorld world = (ClientWorld) (Object) this;
+        TickActivityModule.blockChanged(world, pos, myclient$oldState, state);
+        myclient$oldState = null;
         ChunkScanner.blockUpdated(world, pos, state);
         HiveChunkFinderModule.blockUpdated(world, pos);
     }
