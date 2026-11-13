@@ -7,6 +7,9 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public final class BlockClusterRenderer {
 
     private static final double NEAR_PLANE = 0.1;
@@ -105,6 +108,8 @@ public final class BlockClusterRenderer {
             );
         }
 
+        Set<LineKey> drawnEdges = showOutline ? new HashSet<>() : Set.of();
+
         for (BlockClusterGeometry.Face face : mesh.faces()) {
             Vec3d[] vertices = faceVertices(face, safeBoxSize);
 
@@ -117,13 +122,15 @@ public final class BlockClusterRenderer {
                     Vec3d start = vertices[i];
                     Vec3d end = vertices[(i + 1) % vertices.length];
 
-                    renderThickLine(
-                            context,
-                            start,
-                            end,
-                            outlineColor,
-                            safeLineWidth
-                    );
+                    if (drawnEdges.add(LineKey.of(start, end))) {
+                        renderThickLine(
+                                context,
+                                start,
+                                end,
+                                outlineColor,
+                                safeLineWidth
+                        );
+                    }
                 }
             }
         }
@@ -136,6 +143,23 @@ public final class BlockClusterRenderer {
                     safeTracerWidth,
                     safeMaxTracers
             );
+        }
+    }
+
+    private record LineKey(long ax, long ay, long az, long bx, long by, long bz) {
+        static LineKey of(Vec3d first, Vec3d second) {
+            long ax = Math.round(first.x * 10000.0);
+            long ay = Math.round(first.y * 10000.0);
+            long az = Math.round(first.z * 10000.0);
+            long bx = Math.round(second.x * 10000.0);
+            long by = Math.round(second.y * 10000.0);
+            long bz = Math.round(second.z * 10000.0);
+
+            boolean swap = ax > bx || (ax == bx && ay > by)
+                    || (ax == bx && ay == by && az > bz);
+            return swap
+                    ? new LineKey(bx, by, bz, ax, ay, az)
+                    : new LineKey(ax, ay, az, bx, by, bz);
         }
     }
 
