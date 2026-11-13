@@ -5,6 +5,8 @@ import dev.myclient.chunkfinder.ChunkScanner;
 import dev.myclient.module.modules.HiveChunkFinderModule;
 import dev.myclient.module.modules.ActivityDetector;
 import org.spongepowered.asm.mixin.Unique;
+import dev.myclient.module.modules.ActivityDetector;
+import org.spongepowered.asm.mixin.Unique;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.client.world.ClientWorld;
@@ -20,8 +22,15 @@ public abstract class ClientWorldBlockUpdateMixin {
 
     @Unique private BlockState myclient$oldState;
 
+    @Unique private BlockState myclient$oldState;
+
     @Inject(method = "setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;II)Z", at = @At("HEAD"))
     private void myclient$captureOldState(BlockPos pos, BlockState state, int flags, int maxUpdateDepth, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Boolean> cir) {
+        myclient$oldState = ((ClientWorld) (Object) this).getBlockState(pos);
+    }
+
+    @Inject(method = "setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;II)Z", at = @At("HEAD"))
+    private void myclient$captureOldState(BlockPos pos, BlockState state, int flags, int maxUpdateDepth, CallbackInfoReturnable<Boolean> cir) {
         myclient$oldState = ((ClientWorld) (Object) this).getBlockState(pos);
     }
 
@@ -39,6 +48,10 @@ public abstract class ClientWorldBlockUpdateMixin {
         if (!cir.getReturnValue()) {
             return;
         }
+
+        BlockState oldState = myclient$oldState;
+        myclient$oldState = null;
+        ActivityDetector.blockChanged(pos, oldState != null && oldState.isAir(), state.isAir());
 
         BlockState oldState = myclient$oldState;
         myclient$oldState = null;
