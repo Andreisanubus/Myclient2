@@ -69,6 +69,8 @@ public final class Catalog {
         m.add(new RenderMods.Waypoints());
         st(m, Category.RENDER, "Region Map", "n:Zoom:1:1:5:1", "b:Show Chunks:true");
         m.add(new Freecam());
+        m.add(new TickActivityModule());
+        m.add(new SoundDetectorModule());
         m.add(BlockSetEsp.xray());
         st(m, Category.RENDER, "NoRender", "b:Rain And Snow:true", "b:Lava Overlay:true", "b:Fire On Entities:true");
         m.add(new Zoom());
