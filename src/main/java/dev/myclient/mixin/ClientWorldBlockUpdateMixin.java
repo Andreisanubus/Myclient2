@@ -2,6 +2,7 @@
 package dev.myclient.mixin;
 
 import dev.myclient.chunkfinder.ChunkScanner;
+import dev.myclient.module.modules.HiveChunkFinderModule;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.client.world.ClientWorld;
@@ -35,5 +36,6 @@ public abstract class ClientWorldBlockUpdateMixin {
                 pos,
                 state
         );
+        HiveChunkFinderModule.blockUpdated((ClientWorld) (Object) this, pos);
     }
 }
