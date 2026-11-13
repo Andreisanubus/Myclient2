@@ -190,11 +190,6 @@ public final class ChunkScanner {
         for (int x = centerX - distance; x <= centerX + distance; x++) {
             for (int z = centerZ - distance; z <= centerZ + distance; z++) {
 
-                // Nu scanăm chunk-ul în care se află jucătorul.
-                if (x == centerX && z == centerZ) {
-                    continue;
-                }
-
                 WorldChunk chunk = MC.world.getChunkManager()
                         .getWorldChunk(x, z);
 
@@ -225,11 +220,6 @@ public final class ChunkScanner {
         }
 
         ChunkPos pos = chunk.getPos();
-
-        if (pos.x == MC.player.getChunkPos().x
-                && pos.z == MC.player.getChunkPos().z) {
-            return;
-        }
 
         long key = ChunkPos.toLong(pos.x, pos.z);
 
