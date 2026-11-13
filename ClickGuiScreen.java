@@ -179,7 +179,7 @@ public class ClickGuiScreen extends Screen {
         return false;
     }
 
-    private void openWin(Module m) { winMod = m; winSec = 0; winScroll = 0; focus = null; editing = null; }
+    private void openWin(Module m) { winMod = m; winSec = 0; winScroll = 0; winSectionScroll = 0; focus = null; editing = null; }
 
     private int moduleBlock(DrawContext c, Module m, int x, int y, int w, int mx, int my) {
         boolean on = m.isEnabled(), has = hasSettings(m);
