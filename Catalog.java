@@ -1,10 +1,9 @@
-
 package dev.myclient.module;
 
 import dev.myclient.module.modules.*;
 import java.util.List;
 
-/** Toate modulele din client, in ordinea din panouri. Cele cu * din GUI sunt inregistrate dar fara logica inca (Stub). */
+/** Toate modulele din client, in ordinea din panouri. */
 public final class Catalog {
     private Catalog() {}
 
@@ -18,7 +17,6 @@ public final class Catalog {
         m.add(SusFinder.susChunkFinder());
         m.add(new ChunkFinderModule());
         m.add(new HiveChunkFinderModule());
-
         m.add(SusFinder.amethystBypass());
         st(m, Category.BASE_RAID, "Tunnel Base Finder", "b:Follow Sus Chunks:true", "n:Scan Radius:64:16:256:8", "m:Move:Walk:Walk|Fly");
         st(m, Category.BASE_RAID, "Media Base Finder", "n:Min Storage:8:1:64:1", "n:Radius:96:16:256:8");
@@ -68,10 +66,10 @@ public final class Catalog {
         m.add(new RenderMods.Waypoints());
         st(m, Category.RENDER, "Region Map", "n:Zoom:1:1:5:1", "b:Show Chunks:true");
         m.add(new Freecam());
+        m.add(new Freelook());
         m.add(new TickActivityModule());
         m.add(new SoundDetector());
         m.add(new PerformanceModule());
-
         m.add(BlockSetEsp.xray());
         st(m, Category.RENDER, "NoRender", "b:Rain And Snow:true", "b:Lava Overlay:true", "b:Fire On Entities:true");
         m.add(new Zoom());
@@ -86,7 +84,7 @@ public final class Catalog {
         m.add(new BoatMods.BoatFly());
         m.add(new BoatMods.BoatNoClip());
         st(m, Category.MOVEMENT, "Elytra Autopilot", "n:Cruise Height:200:60:320:5", "b:Auto Firework:true");
-        st(m, Category.MOVEMENT, "Elytra Fly", "n:Speed:1.5:0.5:5:0.1", "b:Auto Swap:true");
+        st(m, Category.MOVEMENT, "Elytra Fly", "n:Speed:1.5:0.5:5:0.1");
 
         // ---------------- WORLD ----------------
         st(m, Category.WORLD, "Area Miner", "n:Size X:8:1:64:1", "n:Size Z:8:1:64:1", "n:Depth:4:1:64:1");
