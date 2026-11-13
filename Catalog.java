@@ -29,6 +29,7 @@ public final class Catalog {
         // ---------------- DONUT ----------------
         st(m, Category.DONUT, "Donut Speed Mine", "n:Break At %:80:50:100:5");
         m.add(new AntiVanish());
+        m.add(new StaffDetector());
         m.add(new StaffListHud());
         m.add(new StaffLiveHud());
         m.add(new AutoRelog());
