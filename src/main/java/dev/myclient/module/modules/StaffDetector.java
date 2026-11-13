@@ -145,7 +145,7 @@ public final class StaffDetector extends Module {
     }
 
     private void scanPositionJerk() {
-        Vec3d now = mc.player.getPos();
+        Vec3d now = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         if (lastPosition != null && positionSensor.value) {
             double moved = now.distanceTo(lastPosition);
             boolean noMovementInput = !mc.options.forwardKey.isPressed()
