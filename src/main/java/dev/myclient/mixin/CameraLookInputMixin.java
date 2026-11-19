@@ -2,35 +2,39 @@ package dev.myclient.mixin;
 
 import dev.myclient.module.modules.Freecam;
 import dev.myclient.module.modules.Freelook;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Mouse;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
+import net.minecraft.client.MinecraftClient;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * Routes vanilla mouse-look input to the active detached camera entity.
- * The local player keeps its own yaw/pitch, so movement direction is unchanged
- * while Freelook is enabled and the player remains fixed while Freecam is enabled.
+ * Intercepts the exact vanilla mouse-look call inside Mouse.updateMouse.
+ * This avoids changing the player's rotation while a detached camera is active.
  */
-@Mixin(Entity.class)
+@Mixin(Mouse.class)
 public abstract class CameraLookInputMixin {
-    @Inject(method = "changeLookDirection(DD)V", at = @At("HEAD"), cancellable = true)
-    private void myclient$routeMouseLookToCamera(double cursorDeltaX, double cursorDeltaY, CallbackInfo ci) {
-        Entity self = (Entity) (Object) this;
+    @Redirect(
+            method = "updateMouse(D)V",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/network/ClientPlayerEntity;changeLookDirection(DD)V"
+            ),
+            require = 0
+    )
+    private void myclient$routeMouseLookToCamera(ClientPlayerEntity player, double cursorDeltaX, double cursorDeltaY) {
         MinecraftClient client = MinecraftClient.getInstance();
 
-        if (client.player == null || self != client.player || (!Freecam.active && !Freelook.active)) {
-            return;
+        if (client.player != null && player == client.player && (Freecam.active || Freelook.active)) {
+            Entity camera = client.getCameraEntity();
+            if (camera != null && camera != client.player) {
+                camera.changeLookDirection(cursorDeltaX, cursorDeltaY);
+                return;
+            }
         }
 
-        Entity camera = client.getCameraEntity();
-        if (camera == null || camera == client.player) {
-            return;
-        }
-
-        camera.changeLookDirection(cursorDeltaX, cursorDeltaY);
-        ci.cancel();
+        player.changeLookDirection(cursorDeltaX, cursorDeltaY);
     }
 }
